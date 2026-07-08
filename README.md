@@ -1,0 +1,149 @@
+# RoboOps
+
+RoboOps 是面向机器人、自动化设备与具身智能商业落地场景的商业运营平台。它把点位、设备/机器人、商品/服务流程、订单/服务请求、支付、异常、任务工单、角色权限、配置发布和数据看板串成一套可复制的运营系统。
+
+当前仓库包含 RoboOps 的产品规划文档、项目材料归档规范，以及一个基于 Vite + React + TypeScript 的前端 MVP 工程。MVP 重点验证运营后台的信息架构、角色权限、配置发布、异常处理、任务工单、退款售后和报表闭环。
+
+## 在线演示
+
+生产地址：
+
+```text
+https://roboops-console.pages.dev/
+```
+
+GitHub 仓库：
+
+```text
+https://github.com/techfanseric/RoboOps
+```
+
+演示登录：
+
+```text
+密码：RoboOps@2026
+```
+
+可使用启用账号的姓名、账号 ID 或本地邮箱登录。常用示例：
+
+| 账号 | 角色 | 数据范围 |
+| --- | --- | --- |
+| 林砚 / `usr-000` | 平台支持 | RoboOps 平台 / 全部租户 |
+| 周岚 / `usr-006` | 租户管理员 | 星舟具身智能 / 全部品牌 |
+| 李明 / `usr-001` | 业务负责人 | 星舟具身智能 / 全部品牌 |
+| 陈澄 / `usr-002` | 运营负责人 | RoboTea Lab / 深圳 |
+| 王越 / `usr-003` | 机器人/设备运维 | 深圳湾展厅 A 点、南山机器人饮品亭 |
+| 程川 / `usr-012` | 现场维护员 | 南山机器人饮品亭 |
+| 顾凡 / `usr-013` | 数据查看员 | RoboTea Lab / 深圳 |
+| 叶青 / `usr-014` | 审计员 | 星舟具身智能 / 全部品牌 / 审计数据 |
+
+完整账号和角色视角见 `docs/15-登录账号与角色视角矩阵.md`。
+
+## 当前能力
+
+- 工作台：按当前账号职责展示经营状态、优先队列和处理边界。
+- 品牌或组织：管理租户、品牌、组织骨架和运营范围。
+- 场景模板：抽象饮品亭、机器人服务站等业务对象、字段、状态和异常类型。
+- 点位管理：维护点位营业状态、上线检查、可售范围和健康状态。
+- 机器人/设备管理：查看设备状态、事件日志、命令记录和高风险命令审批。
+- 商品/服务目录：管理 SKU、服务项目、可售点位和配置变更。
+- 订单/服务请求中心：追踪履约状态、支付、设备执行事件、异常和退款。
+- 异常中心：支持异常推进、转任务、转退款、关闭和审计留痕。
+- 任务/工单：支持现场巡检、维修、补给、人工确认等任务闭环。
+- 配置发布：支持对象级配置发布、审批、回退申请和发布影响范围。
+- 报表：基于当前经营事实展示请求、异常、退款、任务、设备和同步状态。
+- 角色权限：验证菜单权限、动作权限、数据范围、角色实例和审批分离。
+
+## 本地运行
+
+前端工程位于 `app/`：
+
+```bash
+cd /Users/ericyim/RoboOps/app
+npm install
+npm run dev
+```
+
+默认开发地址：
+
+```text
+http://127.0.0.1:5173/
+```
+
+常用命令：
+
+```bash
+cd /Users/ericyim/RoboOps/app
+npm run check
+npm run build
+npm run preview
+```
+
+更详细的前端工程说明见 `app/README.md`。
+
+## 仓库结构
+
+```text
+RoboOps/
+  app/        React/Vite 前端工程
+  docs/       产品规划、验收记录、权限模型、部署记录
+  materials/  原始访谈材料、转录和总结归档
+```
+
+关键入口：
+
+- `docs/00-项目索引.md`：项目统一口径、文档地图和阅读顺序。
+- `docs/07-PRD-v0.1.md`：MVP 产品需求文档。
+- `docs/08-信息架构与页面清单.md`：后台菜单、页面和关键字段。
+- `docs/09-核心数据模型ERD.md`：核心实体、状态枚举和权限关系。
+- `docs/13-ReactVite工程验收对照.md`：当前前端工程验收记录。
+- `docs/18-免费云部署与CICD实施.md`：Cloudflare Pages + GitHub Actions 部署记录。
+- `app/src/data/mockData.ts`：当前 MVP 的本地样例数据。
+- `app/src/services/operations.ts`：前端样例业务动作、权限策略和状态变更逻辑。
+
+## 技术栈
+
+- Vite `6.4.3`
+- React `19.2.7`
+- TypeScript `6.0.3`
+- React Router `7.18.1`
+- Lucide React `1.23.0`
+- Cloudflare Pages
+- GitHub Actions
+
+## 部署与 CI/CD
+
+当前使用免费云资源部署：
+
+- 静态托管：Cloudflare Pages
+- 生产域名：`https://roboops-console.pages.dev/`
+- 生产分支：`main`
+- 构建目录：`app/dist`
+- 自动部署：推送 `main` 后触发 `.github/workflows/deploy.yml`
+
+GitHub Actions 需要以下仓库 Secrets：
+
+```text
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
+```
+
+不要将 Cloudflare API Token、数据库密码或其他敏感信息提交到仓库。
+
+## 当前边界
+
+当前版本是前端 MVP，不是完整生产系统：
+
+- 登录、权限、审批和审计使用前端样例数据验证产品闭环。
+- 业务状态保存在浏览器 `localStorage`，刷新后可保留本机操作状态，但不同设备之间不会同步。
+- 尚未接入真实 API、企业账号/SSO、服务端权限矩阵、服务端持久化和不可篡改审计日志。
+- 当前不需要 Supabase；后续若要做多设备同步、真实账号、审计日志或 API outbox 持久化，再选择 Supabase Free、Cloudflare D1/KV/R2 或正式后端服务。
+
+## 后续方向
+
+- 接入真实认证和服务端 IAM。
+- 将配置发布、审批、任务、异常、退款和 API outbox 持久化。
+- 建立服务端权限矩阵和 API 二次校验。
+- 补充真实设备、订单、支付、退款和文件附件接口。
+- 增加路由级拆包，降低前端首包体积。
+- 增加部署监控、失败通知和线上访问分析。
