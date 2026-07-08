@@ -89,7 +89,7 @@ CLOUDFLARE_API_TOKEN=<Cloudflare Pages 写入权限 token>
 - Cloudflare Pages 生产地址：`https://roboops-console.pages.dev/`。
 - 首次直传部署 ID：`dc07133e-4858-4b9f-b491-b7f6606855a7`。
 - GitHub 私有仓库已创建：`https://github.com/techfanseric/RoboOps`。
-- 本地 Git 仓库已绑定 `origin`：`https://github.com/techfanseric/RoboOps.git`。
+- 本地 Git 仓库已绑定 `origin`：`git@github.com:techfanseric/RoboOps.git`。
 - GitHub Secret `CLOUDFLARE_ACCOUNT_ID` 已写入。
 - GitHub Secret `CLOUDFLARE_API_TOKEN` 已写入。
 - Cloudflare API token 验证结果：有效且 active。
@@ -112,6 +112,10 @@ npm run build
 - `https://roboops-console.pages.dev/login` 返回 HTTP 200，说明 SPA 回退生效。
 - `https://roboops-console.pages.dev/devices/RB-CF-001` 返回 HTTP 200，说明详情直链回退生效。
 - `_headers` 生效，响应包含 `X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin` 和 `X-Frame-Options: DENY`。
+- GitHub Actions 自动部署已通过，运行地址：`https://github.com/techfanseric/RoboOps/actions/runs/28933529879`。
+- CI 部署提交：`0bb56e10f88f7655e67999edf5f912af3e6619ae`。
+- CI 生产部署 ID：`1c6de068-4ded-48c4-915a-cf887abc51f3`。
+- CI 生产部署预览地址：`https://1c6de068.roboops-console.pages.dev`。
 - 当前存在一个 Vite chunk 体积超过 500 kB 的提示，不阻塞部署；后续真实上线前可按模块做动态导入拆包。
 
 ## 7. 后续扩展
