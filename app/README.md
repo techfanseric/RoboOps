@@ -32,7 +32,29 @@ http://127.0.0.1:5173/
 npm run check
 npm run build
 npm run preview
+npm run deploy:cloudflare
 ```
+
+## 云端部署
+
+推荐沿用 `~/waylog-pwa` 的免费部署路线：
+
+- 托管：Cloudflare Pages 免费 `pages.dev` 域名
+- CI/CD：GitHub Actions 在 `main` 推送后构建并通过 Wrangler 部署
+- 构建目录：`app/dist`
+- Cloudflare Pages 项目名：`roboops-console`
+- 生产地址：`https://roboops-console.pages.dev/`
+
+GitHub 仓库需要配置以下 Secrets：
+
+```text
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
+```
+
+`CLOUDFLARE_API_TOKEN` 只需要 Cloudflare Pages 写入权限，不要提交到代码仓库。
+
+项目已在 `app/public/_redirects` 配置 SPA 回退，云端直连 `/login`、`/devices/:id` 等 React Router 路由时会回到 `index.html`。
 
 ## 工程结构
 
