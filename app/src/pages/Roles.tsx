@@ -1,6 +1,7 @@
 import { Ban, Clock3, ListPlus, MailPlus, ShieldCheck, UserPlus } from "lucide-react";
 import type { Dispatch } from "react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { staticData } from "../data/mockData";
 import { navItems } from "../components/AppShell";
 import { ScopeSelector, firstScopeSelection, resolveScopeSelection, scopeTypeLabel } from "../components/ScopeSelector";
@@ -25,10 +26,21 @@ import type { AppState, ScopeSelection, TeamAssignment, TeamSettings } from "../
 import { Badge, DataTable, EmptyState, NameCell, Section } from "../components/ui";
 import { ApprovalActions, TeamRecommendationTable } from "./sharedViews";
 
+type RoleViewId = "current" | "users" | "team" | "policies" | "audit";
+
+const roleViews: Array<{ id: RoleViewId; label: string }> = [
+  { id: "current", label: "当前权限" },
+  { id: "users", label: "账号" },
+  { id: "team", label: "团队" },
+  { id: "policies", label: "策略" },
+  { id: "audit", label: "审批与日志" },
+];
+
 export function Roles({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
   const [activating, setActivating] = useState<TeamAssignment | null>(null);
   const [lifecycle, setLifecycle] = useState<{ assignment: TeamAssignment; action: "review" | "revoke" } | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [activeView, setActiveView] = useState<RoleViewId>("current");
   const visibleApprovals = state.approvalRequests
     .filter((approval) => approvalVisibleForCurrentUser(state, approval))
     .sort((left, right) => Number(right.status === "待审批") - Number(left.status === "待审批"));
@@ -68,126 +80,165 @@ export function Roles({ state, dispatch }: { state: AppState; dispatch: Dispatch
   });
   return (
     <>
-      <Section title="当前账号权限来源" meta={`${user.name} / ${user.role} / ${user.scope}`}>
-        <DataTable
-          headers={["来源", "角色", "数据范围", "权限包", "状态"]}
-          rows={[
-            [<NameCell primary={user.name} secondary="账号基础角色" />, user.role, user.scope, effectivePackages.map((pkg) => <Badge key={pkg} value={pkg} tone="neutral" />), <Badge value="启用" />],
-            ...currentAssignments.map((assignment) => [<NameCell primary={assignment.assigneeName || "-"} secondary={assignment.id} />, assignment.role, assignment.scope, assignment.packageSummary, <Badge value={assignment.status} />]),
-          ]}
-        />
-      </Section>
-      <Section title="当前账号菜单授权" meta={`有效角色：${effectiveRoles.join("、")}`}>
-        <DataTable headers={["菜单", "状态", "授权来源", "判定说明"]} rows={menuRows} />
-      </Section>
-      <Section title="当前账号动作权限" meta="同一模块内的查看、编辑、审批、导出和危险动作分开判定">
-        <DataTable headers={["模块", "动作", "风险", "状态", "来源", "判定说明"]} rows={actionRows} />
-      </Section>
-      <Section title="登录账号与职责" meta={invitationPolicy.allowed ? "账号由登录态确定；管理员按数据范围查看职责和菜单授权" : "当前账号仅显示自己的登录态、职责和菜单授权"}>
-        <DataTable headers={["账号", "角色", "数据范围", "工作重点", "可见菜单", "状态"]} rows={accountRows} />
-      </Section>
-      <Section title="角色模板" meta="权限包、数据范围和审批策略">
-        <DataTable headers={["角色", "数据范围", "权限包", "风险控制"]} rows={staticData.roles.map((role) => [<NameCell primary={role.name} secondary="模板" />, role.scope, role.packages.map((item) => <Badge key={item} value={item} tone="neutral" />), role.risk])} />
-      </Section>
-      <Section
-        title="用户管理"
-        meta={invitationPolicy.allowed ? "账号状态、角色绑定和数据范围" : "当前账号没有用户邀请和授权管理权限"}
-        action={
-          <button className="text-button primary-action" type="button" disabled={!invitationPolicy.allowed} title={invitationPolicy.message} onClick={() => setInviting(true)}>
-            <MailPlus className="lucide-icon" /> 邀请用户
+      <div className="section-tabs" role="tablist" aria-label="角色权限分组">
+        {roleViews.map((view) => (
+          <button
+            className={activeView === view.id ? "active" : ""}
+            type="button"
+            role="tab"
+            aria-selected={activeView === view.id}
+            key={view.id}
+            onClick={() => setActiveView(view.id)}
+          >
+            {view.label}
           </button>
-        }
-      >
-        <DataTable
-          headers={["用户", "角色", "数据范围", "状态", "最近登录"]}
-          rows={visibleAccounts.map((account) => {
-            const effectiveProfile = accountEffectiveProfile({ ...state, currentUserId: account.id, filters: { brand: "all", scenario: "all", point: "all" } }, account.id);
-            return [<NameCell primary={account.name} secondary={account.id} />, effectiveProfile.role, effectiveProfile.scope, <Badge value={account.status} />, account.login];
-          })}
-        />
-      </Section>
-      <Section title="用户邀请" meta="待接受邀请不会生成可登录账号；接受后再进入角色实例绑定和审批">
-        {visibleInvitations.length ? (
-          <DataTable
-            headers={["邀请", "租户/客户", "角色", "数据范围", "状态", "有效期", "发起人"]}
-            rows={visibleInvitations.map((invitation) => [
-              <NameCell primary={invitation.name} secondary={invitation.email} />,
-              invitation.tenant,
-              invitation.role,
-              invitation.scope,
-              <Badge value={invitation.status} />,
-              invitation.expiresAt,
-              invitation.invitedBy,
-            ])}
-          />
-        ) : (
-          <EmptyState>当前范围暂无待接受邀请</EmptyState>
-        )}
-      </Section>
-      <div className="grid two">
-        <Section
-          title="团队搭建"
-          meta="经营模式、点位规模和人员能力"
-          action={<button className="text-button primary-action" type="button" onClick={() => dispatch({ type: "apply-team-template" })}><ListPlus className="lucide-icon" /> 生成角色草案</button>}
-        >
-          <div className="form-grid">
-            <SelectField label="经营模式" value={state.team.mode} options={["客户自营", "平台代运营", "联合运营", "区域代理"]} onChange={(value) => dispatch({ type: "set-team", key: "mode", value })} />
-            <SelectField label="点位规模" value={state.team.scale} options={["1-3 点位", "3-20 点位", "20-50 点位", "50+ 点位"]} onChange={(value) => dispatch({ type: "set-team", key: "scale", value })} />
-            <SelectField label="区域范围" value={state.team.coverage} options={["单城市", "多城市", "跨区域"]} onChange={(value) => dispatch({ type: "set-team", key: "coverage", value })} />
-            <SelectField label="人员能力" value={state.team.service} options={["客服和设备自有，现场外包", "客服自有，设备外包", "平台代管客服和运维", "客户自有完整团队"]} onChange={(value) => dispatch({ type: "set-team", key: "service", value })} />
+        ))}
+        {effectiveRoles.includes("平台支持") ? <Link className="tab-link" to="/roles/platform">平台管理</Link> : null}
+      </div>
+
+      {activeView === "current" ? (
+        <>
+          <Section title="当前账号权限来源" meta={`${user.name} / ${user.role} / ${user.scope}`}>
+            <DataTable
+              headers={["来源", "角色", "数据范围", "权限包", "状态"]}
+              rows={[
+                [<NameCell primary={user.name} secondary="账号基础角色" />, user.role, user.scope, effectivePackages.map((pkg) => <Badge key={pkg} value={pkg} tone="neutral" />), <Badge value="启用" />],
+                ...currentAssignments.map((assignment) => [<NameCell primary={assignment.assigneeName || "-"} secondary={assignment.id} />, assignment.role, assignment.scope, assignment.packageSummary, <Badge value={assignment.status} />]),
+              ]}
+            />
+          </Section>
+          <Section title="当前账号菜单授权" meta={`有效角色：${effectiveRoles.join("、")}`}>
+            <DataTable headers={["菜单", "状态", "授权来源", "判定说明"]} rows={menuRows} />
+          </Section>
+          <Section title="当前账号动作权限" meta="查看、编辑、审批、导出和危险动作分开判定">
+            <DataTable headers={["模块", "动作", "风险", "状态", "来源", "判定说明"]} rows={actionRows} />
+          </Section>
+        </>
+      ) : null}
+
+      {activeView === "users" ? (
+        <>
+          <Section title="登录账号与职责" meta={invitationPolicy.allowed ? "管理员按数据范围查看账号职责和菜单授权" : "当前账号仅显示自己的登录态、职责和菜单授权"}>
+            <DataTable headers={["账号", "角色", "数据范围", "工作重点", "可见菜单", "状态"]} rows={accountRows} />
+          </Section>
+          <Section
+            title="用户管理"
+            meta={invitationPolicy.allowed ? "账号状态、角色绑定和数据范围" : "当前账号没有用户邀请和授权管理权限"}
+            action={
+              <button className="text-button primary-action" type="button" disabled={!invitationPolicy.allowed} title={invitationPolicy.message} onClick={() => setInviting(true)}>
+                <MailPlus className="lucide-icon" /> 邀请用户
+              </button>
+            }
+          >
+            <DataTable
+              headers={["用户", "角色", "数据范围", "状态", "最近登录"]}
+              rows={visibleAccounts.map((account) => {
+                const effectiveProfile = accountEffectiveProfile({ ...state, currentUserId: account.id, filters: { brand: "all", scenario: "all", point: "all" } }, account.id);
+                return [<NameCell primary={account.name} secondary={account.id} />, effectiveProfile.role, effectiveProfile.scope, <Badge value={account.status} />, account.login];
+              })}
+            />
+          </Section>
+          <Section title="用户邀请" meta="接受后再进入角色实例绑定和审批">
+            {visibleInvitations.length ? (
+              <DataTable
+                headers={["邀请", "租户/客户", "角色", "数据范围", "状态", "有效期", "发起人"]}
+                rows={visibleInvitations.map((invitation) => [
+                  <NameCell primary={invitation.name} secondary={invitation.email} />,
+                  invitation.tenant,
+                  invitation.role,
+                  invitation.scope,
+                  <Badge value={invitation.status} />,
+                  invitation.expiresAt,
+                  invitation.invitedBy,
+                ])}
+              />
+            ) : (
+              <EmptyState>当前范围暂无待接受邀请</EmptyState>
+            )}
+          </Section>
+        </>
+      ) : null}
+
+      {activeView === "team" ? (
+        <>
+          <div className="grid two">
+            <Section
+              title="团队搭建"
+              meta="经营模式、点位规模和人员能力"
+              action={<button className="text-button primary-action" type="button" onClick={() => dispatch({ type: "apply-team-template" })}><ListPlus className="lucide-icon" /> 生成角色草案</button>}
+            >
+              <div className="form-grid">
+                <SelectField label="经营模式" value={state.team.mode} options={["客户自营", "平台代运营", "联合运营", "区域代理"]} onChange={(value) => dispatch({ type: "set-team", key: "mode", value })} />
+                <SelectField label="点位规模" value={state.team.scale} options={["1-3 点位", "3-20 点位", "20-50 点位", "50+ 点位"]} onChange={(value) => dispatch({ type: "set-team", key: "scale", value })} />
+                <SelectField label="区域范围" value={state.team.coverage} options={["单城市", "多城市", "跨区域"]} onChange={(value) => dispatch({ type: "set-team", key: "coverage", value })} />
+                <SelectField label="人员能力" value={state.team.service} options={["客服和设备自有，现场外包", "客服自有，设备外包", "平台代管客服和运维", "客户自有完整团队"]} onChange={(value) => dispatch({ type: "set-team", key: "service", value })} />
+              </div>
+            </Section>
+            <Section title="推荐配置" meta="角色、数据范围和待补齐职责">
+              <TeamRecommendationTable state={state} />
+            </Section>
           </div>
-        </Section>
-        <Section title="推荐配置" meta="角色、数据范围和待补齐职责">
-          <TeamRecommendationTable state={state} />
-        </Section>
-      </div>
-      <Section
-        title="角色实例"
-        meta={state.teamAppliedAt ? `已启用 ${summary.active}/${summary.total}，由团队搭建向导生成于 ${state.teamAppliedAt}` : "生成后用于绑定账号、数据范围和权限包"}
-        action={<Badge value={summary.status} />}
-      >
-        {state.teamAssignments.length ? (
-          <DataTable
-            headers={["角色实例", "账号", "数据范围", "权限包", "有效期", "复核", "状态", "动作"]}
-            rows={state.teamAssignments.map((item) => [
-              <NameCell primary={item.role} secondary={item.id} />,
-              item.assigneeName ? <NameCell primary={item.assigneeName} secondary={item.assigneeId || item.owner} /> : <NameCell primary="待绑定账号" secondary={`建议承担方：${item.owner}`} />,
-              item.scopeRef ? <NameCell primary={item.scopeRef.value} secondary={scopeTypeLabel(item.scopeRef.type)} /> : <NameCell primary="待选择范围" secondary={`建议范围：${item.scope}`} />,
-              item.permissionPackages?.map((pkg) => <Badge key={pkg} value={pkg} tone="neutral" />) || item.packageSummary,
-              item.expiresAt || "-",
-              item.reviewAt ? <NameCell primary={item.reviewAt} secondary={item.lastReviewedAt ? `上次 ${item.lastReviewedAt}` : "等待首次复核"} /> : "-",
-              <Badge value={assignmentLifecycleStatus(item)} />,
-              <TeamAssignmentRowActions state={state} assignment={item} onConfigure={setActivating} onLifecycle={setLifecycle} />,
-            ])}
-          />
-        ) : (
-          <EmptyState>尚未生成角色实例</EmptyState>
-        )}
-      </Section>
-      <div className="grid two">
-        <Section title="权限包" meta="动作范围、风险等级和授权边界">
-          <DataTable headers={["权限包", "风险", "动作"]} rows={staticData.permissionPackages.map((pkg) => [pkg.name, <Badge value={pkg.risk} />, pkg.actions])} />
-        </Section>
-        <Section title="审批策略" meta="退款、配置发布和设备命令">
-          <DataTable headers={["动作", "审批人", "规则"]} rows={staticData.approvalPolicies.map((policy) => [policy.action, policy.approver, policy.rule])} />
-        </Section>
-      </div>
-      <div className="grid two">
-        <Section title="权限风险" meta="需要复核的授权组合">
-          <div className="risk-list">
-            <div className="risk-item">客服/售后可发起退款，退款审批由独立审批人完成。</div>
-            <div className="risk-item">设备高风险命令需要二次确认和操作日志。</div>
-            <div className="risk-item">外部供应商只能访问对应点位、设备或工单。</div>
-            <div className="risk-item">每类异常必须配置默认负责人和升级对象。</div>
+          <Section
+            title="角色实例"
+            meta={state.teamAppliedAt ? `已启用 ${summary.active}/${summary.total}，由团队搭建向导生成于 ${state.teamAppliedAt}` : "生成后用于绑定账号、数据范围和权限包"}
+            action={<Badge value={summary.status} />}
+          >
+            {state.teamAssignments.length ? (
+              <DataTable
+                headers={["角色实例", "账号", "数据范围", "权限包", "有效期", "复核", "状态", "动作"]}
+                rows={state.teamAssignments.map((item) => [
+                  <NameCell primary={item.role} secondary={item.id} />,
+                  item.assigneeName ? <NameCell primary={item.assigneeName} secondary={item.assigneeId || item.owner} /> : <NameCell primary="待绑定账号" secondary={`建议承担方：${item.owner}`} />,
+                  item.scopeRef ? <NameCell primary={item.scopeRef.value} secondary={scopeTypeLabel(item.scopeRef.type)} /> : <NameCell primary="待选择范围" secondary={`建议范围：${item.scope}`} />,
+                  item.permissionPackages?.map((pkg) => <Badge key={pkg} value={pkg} tone="neutral" />) || item.packageSummary,
+                  item.expiresAt || "-",
+                  item.reviewAt ? <NameCell primary={item.reviewAt} secondary={item.lastReviewedAt ? `上次 ${item.lastReviewedAt}` : "等待首次复核"} /> : "-",
+                  <Badge value={assignmentLifecycleStatus(item)} />,
+                  <TeamAssignmentRowActions state={state} assignment={item} onConfigure={setActivating} onLifecycle={setLifecycle} />,
+                ])}
+              />
+            ) : (
+              <EmptyState>尚未生成角色实例</EmptyState>
+            )}
+          </Section>
+        </>
+      ) : null}
+
+      {activeView === "policies" ? (
+        <>
+          <Section title="角色模板" meta="权限包、数据范围和审批策略">
+            <DataTable headers={["角色", "数据范围", "权限包", "风险控制"]} rows={staticData.roles.map((role) => [<NameCell primary={role.name} secondary="模板" />, role.scope, role.packages.map((item) => <Badge key={item} value={item} tone="neutral" />), role.risk])} />
+          </Section>
+          <div className="grid two">
+            <Section title="权限包" meta="动作范围、风险等级和授权边界">
+              <DataTable headers={["权限包", "风险", "动作"]} rows={staticData.permissionPackages.map((pkg) => [pkg.name, <Badge value={pkg.risk} />, pkg.actions])} />
+            </Section>
+            <Section title="审批策略" meta="退款、配置发布和设备命令">
+              <DataTable headers={["动作", "审批人", "规则"]} rows={staticData.approvalPolicies.map((policy) => [policy.action, policy.approver, policy.rule])} />
+            </Section>
           </div>
-        </Section>
-        <Section title="审批队列" meta="退款、配置发布和高风险关闭动作">
-          <DataTable headers={["时间", "动作", "对象", "发起人", "审批人", "状态", "处理"]} rows={visibleApprovals.map((approval) => [approval.time, approval.action, approval.target, approval.requester, approval.approver, <Badge value={approval.status} />, <ApprovalActions state={state} approval={approval} dispatch={dispatch} />])} />
-        </Section>
-      </div>
-      <Section title="操作日志" meta="关键动作、权限变更和高风险记录">
-        <DataTable headers={["时间", "操作人", "动作", "对象", "风险", "结果", "说明"]} rows={visibleAuditLogs.map((log) => [log.time, log.operator, log.action, log.object, <Badge value={log.risk} />, <Badge value={log.result} />, log.detail || "-"])} />
-      </Section>
+          <Section title="权限风险" meta="需要复核的授权组合">
+            <div className="risk-list">
+              <div className="risk-item">客服/售后可发起退款，退款审批由独立审批人完成。</div>
+              <div className="risk-item">设备高风险命令需要二次确认和操作日志。</div>
+              <div className="risk-item">外部供应商只能访问对应点位、设备或工单。</div>
+              <div className="risk-item">每类异常必须配置默认负责人和升级对象。</div>
+            </div>
+          </Section>
+        </>
+      ) : null}
+
+      {activeView === "audit" ? (
+        <>
+          <Section title="审批队列" meta="退款、配置发布和高风险关闭动作">
+            <DataTable headers={["时间", "动作", "对象", "发起人", "审批人", "状态", "处理"]} rows={visibleApprovals.map((approval) => [approval.time, approval.action, approval.target, approval.requester, approval.approver, <Badge value={approval.status} />, <ApprovalActions state={state} approval={approval} dispatch={dispatch} />])} />
+          </Section>
+          <Section title="操作日志" meta="关键动作、权限变更和高风险记录">
+            <DataTable headers={["时间", "操作人", "动作", "对象", "风险", "结果", "说明"]} rows={visibleAuditLogs.map((log) => [log.time, log.operator, log.action, log.object, <Badge value={log.risk} />, <Badge value={log.result} />, log.detail || "-"])} />
+          </Section>
+        </>
+      ) : null}
+
       {activating ? <TeamAssignmentDrawer state={state} assignment={activating} dispatch={dispatch} onClose={() => setActivating(null)} /> : null}
       {lifecycle ? <TeamAssignmentLifecycleDrawer state={state} assignment={lifecycle.assignment} action={lifecycle.action} dispatch={dispatch} onClose={() => setLifecycle(null)} /> : null}
       {inviting ? <UserInvitationDrawer state={state} dispatch={dispatch} onClose={() => setInviting(false)} /> : null}

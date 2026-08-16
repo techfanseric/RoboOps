@@ -20,6 +20,12 @@ import { Roles } from "./pages/Roles";
 import { LoginPage } from "./pages/Login";
 import { SystemGuidePage } from "./pages/SystemGuide";
 import { InvitationAcceptPage } from "./pages/InvitationAccept";
+import { PlatformAdminPage } from "./features/platformAdmin/PlatformAdminPage";
+import { IntegrationCenterPage } from "./features/integrations/IntegrationCenterPage";
+import { CatalogResourcesPage, readCatalogResourcesState } from "./features/catalogResources";
+import { AdvancedReportsPage, OrderOperationsPage, orderReportsAccess } from "./features/orderReports";
+import { DeviceOperationsPage, deviceOpsStorageKey, scopeFromAppState as deviceScopeFromAppState } from "./features/deviceOps";
+import { composeOrderSnapshot, readDeviceOpsState } from "./features/crossDomainSnapshot";
 import {
   DeviceDetailRoute,
   IncidentDetailRoute,
@@ -39,11 +45,24 @@ function loadInitialState(): AppState {
   try {
     const saved = JSON.parse(raw) as Partial<AppState>;
     const auth = { ...initial.auth, ...(saved.auth || {}) };
+    const savedUsers = saved.users || [];
+    const users = [
+      ...initial.users.map((user) => savedUsers.find((savedUser) => savedUser.id === user.id) || user),
+      ...savedUsers.filter((savedUser) => !initial.users.some((user) => user.id === savedUser.id)),
+    ];
+    const currentUserId = saved.currentUserId || initial.currentUserId;
     if (auth.authenticated && (!auth.expiresAtEpoch || auth.expiresAtEpoch <= Date.now())) {
       auth.authenticated = false;
       delete auth.sessionId;
       delete auth.expiresAt;
       delete auth.expiresAtEpoch;
+    }
+    if (auth.authenticated && !users.some((user) => user.id === currentUserId && user.status === "启用")) {
+      auth.authenticated = false;
+      delete auth.sessionId;
+      delete auth.expiresAt;
+      delete auth.expiresAtEpoch;
+      auth.lastError = "账号不存在或已停用，请重新登录。";
     }
     if (!auth.authenticated) {
       delete auth.lastError;
@@ -54,8 +73,9 @@ function loadInitialState(): AppState {
       ...initial,
       ...saved,
       auth,
+      currentUserId,
       tenants: saved.tenants || initial.tenants,
-      users: saved.users || initial.users,
+      users,
       filters: { ...initial.filters, ...(saved.filters || {}) },
       team: { ...initial.team, ...(saved.team || {}) },
       userInvitations: saved.userInvitations || initial.userInvitations,
@@ -69,6 +89,12 @@ function loadInitialState(): AppState {
 
 export function App() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadInitialState);
+  const recordFeatureAudit = (event: { action: string; object: string; risk: string; result: string; detail: string }) =>
+    dispatch({ type: "feature-audit", ...event });
+  const orderTenantId = orderReportsAccess(state).tenantId;
+  const orderSnapshot = composeOrderSnapshot(state, orderTenantId, readCatalogResourcesState(state), readDeviceOpsState(state));
+  const devicePageScope = deviceScopeFromAppState(state);
+  const devicePageStorageKey = deviceOpsStorageKey(devicePageScope);
   const location = useLocation();
   const activeId = useMemo(() => {
     const pathname = location.pathname;
@@ -134,9 +160,12 @@ export function App() {
         <Route path="/points" element={<MenuGuard state={state} viewId="points"><Points state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/points/:pointId" element={<MenuGuard state={state} viewId="points"><PointDetailRoute state={state} /></MenuGuard>} />
         <Route path="/devices" element={<MenuGuard state={state} viewId="devices"><Devices state={state} dispatch={dispatch} /></MenuGuard>} />
+        <Route path="/devices/operations" element={<MenuGuard state={state} viewId="devices"><DeviceOperationsPage key={`device-ops-${state.currentUserId}-${devicePageStorageKey}-${state.filters.brand}-${state.filters.scenario}-${state.filters.point}-${devicePageScope.pointIds.slice().sort().join(",")}`} appState={state} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/devices/:deviceId" element={<MenuGuard state={state} viewId="devices"><DeviceDetailRoute state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/catalog" element={<MenuGuard state={state} viewId="catalog"><Catalog state={state} dispatch={dispatch} /></MenuGuard>} />
+        <Route path="/resources" element={<MenuGuard state={state} viewId="resources"><CatalogResourcesPage state={state} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/orders" element={<MenuGuard state={state} viewId="orders"><BusinessRequests state={state} /></MenuGuard>} />
+        <Route path="/orders/operations" element={<MenuGuard state={state} viewId="orders"><OrderOperationsPage appState={state} snapshot={orderSnapshot} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/orders/:requestId" element={<MenuGuard state={state} viewId="orders"><RequestDetailRoute state={state} /></MenuGuard>} />
         <Route path="/incidents" element={<MenuGuard state={state} viewId="incidents"><Incidents state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/incidents/:incidentId" element={<MenuGuard state={state} viewId="incidents"><IncidentDetailRoute state={state} dispatch={dispatch} /></MenuGuard>} />
@@ -145,7 +174,10 @@ export function App() {
         <Route path="/releases" element={<MenuGuard state={state} viewId="releases"><ConfigReleases state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/releases/:releaseId" element={<MenuGuard state={state} viewId="releases"><ReleaseDetailRoute state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/reports" element={<MenuGuard state={state} viewId="reports"><Reports state={state} dispatch={dispatch} /></MenuGuard>} />
+        <Route path="/reports/advanced" element={<MenuGuard state={state} viewId="reports"><AdvancedReportsPage appState={state} snapshot={orderSnapshot} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/roles" element={<MenuGuard state={state} viewId="roles"><Roles state={state} dispatch={dispatch} /></MenuGuard>} />
+        <Route path="/roles/platform" element={<MenuGuard state={state} viewId="roles"><PlatformAdminPage state={state} appDispatch={dispatch} /></MenuGuard>} />
+        <Route path="/integrations" element={<MenuGuard state={state} viewId="integrations"><IntegrationCenterPage state={state} appDispatch={dispatch} /></MenuGuard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

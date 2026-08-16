@@ -1,5 +1,6 @@
 import { FilePenLine, Send } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { Dispatch } from "react";
 import type { AppState, Device } from "../types/core";
 import { configReleaseActionPolicy, filteredDevices, filteredPoints, releaseVisibleForCurrentUser, type AppAction } from "../services/operations";
@@ -15,6 +16,10 @@ export function Devices({ state, dispatch }: { state: AppState; dispatch: Dispat
   const visibleChanges = state.deviceChanges.filter((change) => devices.some((device) => device.id === change.deviceId) && releaseVisibleForCurrentUser(state, change.release));
   return (
     <>
+      <div className="section-tabs" aria-label="设备管理视图">
+        <Link className="tab-link active" to="/devices">设备台账</Link>
+        <Link className="tab-link" to="/devices/operations">设备配置与升级</Link>
+      </div>
       <div className="split-detail">
         <Section
           title="机器人/设备台账"

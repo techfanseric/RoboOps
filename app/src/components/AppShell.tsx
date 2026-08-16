@@ -12,6 +12,8 @@ import {
   LogOut,
   MapPin,
   PackageOpen,
+  PackageSearch,
+  Cable,
   Send,
   ShieldCheck,
 } from "lucide-react";
@@ -36,12 +38,14 @@ export const navItems: NavItem[] = [
   { id: "points", icon: MapPin, label: "点位", count: "8", path: "/points" },
   { id: "devices", icon: Bot, label: "机器人设备", count: "16", path: "/devices" },
   { id: "catalog", icon: PackageOpen, label: "商品服务", count: "14", path: "/catalog" },
+  { id: "resources", icon: PackageSearch, label: "资源耗材", count: "24", path: "/resources" },
   { id: "orders", icon: ClipboardList, label: "订单请求", count: "48", path: "/orders" },
   { id: "incidents", icon: CircleAlert, label: "异常中心", count: "7", path: "/incidents" },
   { id: "tasks", icon: ListChecks, label: "任务工单", count: "11", path: "/tasks" },
   { id: "releases", icon: Send, label: "配置发布", count: "5", path: "/releases" },
   { id: "reports", icon: ChartColumn, label: "报表", count: "9", path: "/reports" },
-  { id: "roles", icon: ShieldCheck, label: "角色权限", count: "15", path: "/roles" },
+  { id: "roles", icon: ShieldCheck, label: "角色权限", count: "20", path: "/roles" },
+  { id: "integrations", icon: Cable, label: "集成开放", count: "8", path: "/integrations" },
 ];
 
 const subtitles: Record<string, string> = {
@@ -51,12 +55,14 @@ const subtitles: Record<string, string> = {
   points: "点位状态、营业设置、设备绑定和负责人",
   devices: "机器人、自动化设备、外围设备和事件",
   catalog: "商品/服务、属性、规格、上下架和履约模板",
+  resources: "资源、料仓、效期、批次与现场作业",
   orders: "订单/服务请求生命周期和执行事件",
   incidents: "异常分派、处理指引、SLA 和处理记录",
   tasks: "补给、维护、人工确认和配置检查",
   releases: "配置版本、发布范围、审批和记录",
   reports: "经营、履约、异常、设备和点位复盘",
   roles: "角色模板、权限包、数据范围和风险检查",
+  integrations: "开发者授权、开放接口、事件订阅与数据同步",
 };
 
 export function AppShell({
@@ -92,13 +98,25 @@ export function AppShell({
     points: String(snapshot.points.length),
     devices: String(snapshot.devices.length),
     catalog: String(state.catalog.filter((item) => visibleBrands.has(item.brand)).length),
+    resources: "24",
     orders: String(snapshot.requests.length),
     incidents: String(snapshot.incidents.length),
     tasks: String(snapshot.tasks.length),
     releases: String(state.releases.filter((release) => releaseVisibleForCurrentUser(state, release.id)).length),
     reports: "5",
     roles: String(staticData.roles.length),
+    integrations: "8",
   };
+  const ActiveIcon = active.icon;
+  function renderFilterFields() {
+    return (
+      <>
+        <SelectField label="品牌" value={state.filters.brand} options={["all", ...filterOptions.brands]} onChange={(value) => onFilterChange("brand", value)} />
+        <SelectField label="场景" value={state.filters.scenario} options={["all", ...filterOptions.scenarios]} onChange={(value) => onFilterChange("scenario", value)} />
+        <SelectField label="点位" value={state.filters.point} options={["all", ...filterOptions.points]} onChange={(value) => onFilterChange("point", value)} />
+      </>
+    );
+  }
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -106,6 +124,30 @@ export function AppShell({
           <h1 className="brand-name">RoboOps</h1>
           <p className="brand-subtitle">机器人商业运营平台</p>
         </div>
+        <details className="mobile-menu">
+          <summary>
+            <span className="nav-icon">
+              <ActiveIcon className="lucide-icon" aria-hidden="true" />
+            </span>
+            <span>菜单：{active.label}</span>
+            <span className="nav-count">{visibleNavItems.length}</span>
+          </summary>
+          <nav className="mobile-nav" aria-label="移动主导航">
+            {visibleNavItems.map((item) => {
+              const Icon = item.icon;
+              const access = menuAccessPolicy(state, item.id);
+              return (
+                <NavLink className={({ isActive }) => `nav-button ${isActive ? "active" : ""}`} to={item.path} key={item.id} title={`${item.label} / ${access.source}`}>
+                  <span className="nav-icon">
+                    <Icon className="lucide-icon" aria-hidden="true" />
+                  </span>
+                  <span>{item.label}</span>
+                  <span className="nav-count">{navCounts[item.id] || item.count}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+        </details>
         <nav className="nav" aria-label="主导航">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
@@ -143,11 +185,11 @@ export function AppShell({
             <p className="page-kicker">{subtitles[active.id]}</p>
             <h2 className="page-title">{active.label}</h2>
           </div>
-          <div className="filters">
-            <SelectField label="品牌" value={state.filters.brand} options={["all", ...filterOptions.brands]} onChange={(value) => onFilterChange("brand", value)} />
-            <SelectField label="场景" value={state.filters.scenario} options={["all", ...filterOptions.scenarios]} onChange={(value) => onFilterChange("scenario", value)} />
-            <SelectField label="点位" value={state.filters.point} options={["all", ...filterOptions.points]} onChange={(value) => onFilterChange("point", value)} />
-          </div>
+          <div className="filters filters-desktop">{renderFilterFields()}</div>
+          <details className="mobile-filter-panel">
+            <summary>筛选范围</summary>
+            <div className="filters">{renderFilterFields()}</div>
+          </details>
         </header>
         <section className="content">{children}</section>
       </main>

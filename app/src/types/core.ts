@@ -7,12 +7,14 @@ export type ViewId =
   | "points"
   | "devices"
   | "catalog"
+  | "resources"
   | "orders"
   | "incidents"
   | "tasks"
   | "releases"
   | "reports"
-  | "roles";
+  | "roles"
+  | "integrations";
 
 export interface NavItem {
   id: ViewId;

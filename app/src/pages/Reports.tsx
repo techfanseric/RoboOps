@@ -1,5 +1,6 @@
 import type { Dispatch } from "react";
 import { RefreshCcw, Send, Undo2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { ApiOperation, AppState } from "../types/core";
 import type { AppAction } from "../services/operations";
 import { apiOperationActionPolicy, apiOperationSyncSummary, apiOperationVisibleForCurrentUser, auditLogVisibleForCurrentUser, businessSnapshot } from "../services/operations";
@@ -16,6 +17,10 @@ export function Reports({ state, dispatch }: { state: AppState; dispatch: Dispat
   const apiSummary = apiOperationSyncSummary(apiOperations);
   return (
     <>
+      <div className="section-tabs" aria-label="报表视图">
+        <Link className="tab-link active" to="/reports">运营概览</Link>
+        <Link className="tab-link" to="/reports/advanced">细分报表与导出</Link>
+      </div>
       <Section title="报表筛选" meta="品牌、场景、点位和时间范围">
         <ReadonlyGrid fields={[["时间范围", "今日 / 近 7 天 / 近 30 天"], ["维度", "品牌、场景、点位、设备、异常类型"], ["导出权限", "报表查看与报表导出分开授权"], ["导出留痕", "导出人、范围、时间和文件记录进入审计日志"]]} />
       </Section>

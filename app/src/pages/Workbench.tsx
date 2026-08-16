@@ -21,7 +21,7 @@ import {
 import type { AppAction } from "../services/operations";
 import type { AppState } from "../types/core";
 import { Badge, DataTable, EmptyState, KpiTile, NameCell, Section } from "../components/ui";
-import { IncidentTable, OperationalFlow, PointBars, ReleaseSnapshot, TodoTable } from "./sharedViews";
+import { IncidentTable, OperationalFlow, TodoTable } from "./sharedViews";
 
 export function Workbench({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
   const user = currentUser(state);
@@ -62,33 +62,23 @@ export function Workbench({ state, dispatch }: { state: AppState; dispatch: Disp
   const onlineDevices = snapshot.devices.filter((device) => device.status === "在线" || device.status === "忙碌").length;
   const revenue = snapshot.requests.filter((request) => request.paid === "已支付" || request.paid === "已确认").reduce((sum, request) => sum + request.amount, 0);
   const roleWorkspace = buildRoleWorkspace(state);
-  const canViewReleases = menuAccessPolicy(state, "releases").allowed;
   const canViewReports = menuAccessPolicy(state, "reports").allowed;
   const canViewFinancial = canViewReports || roleWorkspace.packages.some((pkg) => ["退款审批包", "报表查看包", "报表导出包"].includes(pkg));
   const completedRequests = snapshot.requests.filter((request) => request.status === "delivered").length;
-  const workflowRows = [
-    ["上线准备", <Badge value={`${snapshot.readyPoints.length}/${snapshot.points.length}`} />, "点位准入"],
-    ["接单履约", <Badge value={snapshot.liveRequests.length ? "进行中" : "无待处理"} />, "订单/服务请求"],
-    ["异常处理", <Badge value={snapshot.incidents.length ? "待处理" : "已清空"} />, "异常中心"],
-    ["任务执行", <Badge value={snapshot.tasks.length ? "处理中" : "无待办"} />, "任务/工单"],
-  ];
-  if (canViewReleases) {
-    workflowRows.push(["配置发布", <Badge value={state.releases[0]?.status || "无发布"} />, state.releases[0] ? <NameCell primary={state.releases[0].name} secondary={state.releases[0].id} /> : "-"]);
-  }
+  const openWork = snapshot.incidents.length + snapshot.tasks.length;
   return (
     <>
-      <Section title="当前账号职责" meta={`${user.name} / ${roleWorkspace.primaryRole} / ${user.scope}`}>
-        <div className="grid two">
-          <DataTable
-            headers={["项目", "内容"]}
-            rows={[
-              ["有效角色", roleWorkspace.roles.map((role) => <Badge key={role} value={role} tone="neutral" />)],
-              ["工作重点", roleWorkspace.focus],
-              ["处理节奏", roleWorkspace.rhythm],
-              ["动作边界", roleWorkspace.boundary],
-              ["权限包", roleWorkspace.packages.length ? roleWorkspace.packages.map((pkg) => <Badge key={pkg} value={pkg} tone="neutral" />) : "-"],
-            ]}
-          />
+      <Section title="我的优先事项" meta={`${user.name} / ${roleWorkspace.primaryRole} / ${user.scope}`}>
+        <div className="workbench-focus">
+          <div className="focus-card">
+            <div className="role-strip">
+              {roleWorkspace.roles.map((role) => <Badge key={role} value={role} tone="neutral" />)}
+              {roleWorkspace.packages.slice(0, 3).map((pkg) => <Badge key={pkg} value={pkg} tone="neutral" />)}
+            </div>
+            <p className="mini-label">今天先处理</p>
+            <strong>{roleWorkspace.rhythm}</strong>
+            <span>{roleWorkspace.boundary}</span>
+          </div>
           {roleWorkspace.queueRows.length ? (
             <DataTable headers={["队列", "对象", "状态", "处理口径"]} rows={roleWorkspace.queueRows} />
           ) : (
@@ -96,52 +86,25 @@ export function Workbench({ state, dispatch }: { state: AppState; dispatch: Disp
           )}
         </div>
       </Section>
-      <Section title="今日运营" meta="点位、设备、请求与异常汇总">
-        <div className="grid kpi">
-          <KpiTile title="可营业点位" value={`${snapshot.readyPoints.length}/${snapshot.points.length}`} foot={`营业中 ${snapshot.points.filter((point) => point.status === "营业中").length}`} />
-          <KpiTile title="机器人/设备在线" value={onlineDevices} foot={`总设备 ${snapshot.devices.length}`} />
-          <KpiTile title="履约中请求" value={snapshot.liveRequests.length} foot={canViewFinancial ? `退款处理中 ${snapshot.refunding.length}` : `当前范围 ${snapshot.requests.length}`} />
-          <KpiTile title="待处理异常" value={snapshot.incidents.length} foot={`P1 ${snapshot.incidents.filter((incident) => incident.level === "P1").length}`} />
-          <KpiTile title="待处理任务" value={snapshot.tasks.length} foot={`今日到期 ${snapshot.tasks.filter((task) => task.due.includes("今天")).length}`} />
-          {canViewFinancial ? <KpiTile title="交易额" value={`¥${revenue}`} foot="今日已确认" /> : <KpiTile title="交付完成" value={completedRequests} foot={`当前范围 ${snapshot.requests.length}`} />}
+      <Section title="运行概览" meta="当前范围内的经营信号">
+        <div className="workbench-overview">
+          <div className="grid kpi">
+            <KpiTile title="待处理事项" value={openWork} foot={`异常 ${snapshot.incidents.length} / 任务 ${snapshot.tasks.length}`} />
+            <KpiTile title="可营业点位" value={`${snapshot.readyPoints.length}/${snapshot.points.length}`} foot={`营业中 ${snapshot.points.filter((point) => point.status === "营业中").length}`} />
+            <KpiTile title="设备在线" value={`${onlineDevices}/${snapshot.devices.length}`} foot="机器人和自动化设备" />
+            {canViewFinancial ? <KpiTile title="交易额" value={`¥${revenue}`} foot={`退款处理中 ${snapshot.refunding.length}`} /> : <KpiTile title="交付完成" value={completedRequests} foot={`请求 ${snapshot.requests.length}`} />}
+          </div>
+          <OperationalFlow state={state} showFinancial={canViewFinancial} />
         </div>
       </Section>
-      <Section title="经营闭环" meta="上线、接单、履约、异常、复盘">
-        <OperationalFlow state={state} showFinancial={canViewFinancial} />
-      </Section>
       <div className="grid two">
-        <Section title="异常队列" meta="按等级、SLA 和负责人排序">
+        <Section title="风险队列" meta="按等级、SLA 和负责人排序">
           <IncidentTable state={state} dispatch={dispatch} incidents={activeIncidents(state).slice(0, 4)} />
         </Section>
         <Section title="我的待办" meta="异常、任务、配置审批和人工确认">
           <TodoTable state={state} />
         </Section>
       </div>
-      <div className="grid two">
-        <Section title="点位健康" meta="营业状态、在线设备和异常数量">
-          <PointBars state={state} points={filteredPoints(state)} />
-        </Section>
-        {canViewReleases ? (
-          <Section title="最近配置发布" meta="发布范围、状态和发布人">
-            <ReleaseSnapshot state={state} />
-          </Section>
-        ) : (
-          <Section title="设备状态" meta="当前范围内的机器人和设备">
-            <DataTable
-              headers={["设备", "点位", "状态", "版本"]}
-              rows={filteredDevices(state).map((device) => [
-                <NameCell primary={device.name} secondary={device.sn} />,
-                device.point,
-                <Badge value={device.status} />,
-                device.version,
-              ])}
-            />
-          </Section>
-        )}
-      </div>
-      <Section title="履约链路" meta="请求状态、执行事件和处理记录">
-        <DataTable headers={["阶段", "状态", "对象"]} rows={workflowRows} />
-      </Section>
     </>
   );
 }

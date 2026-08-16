@@ -46,12 +46,14 @@ const menuRules: Record<ViewId, { permission: string; roles: string[]; packages:
   points: { permission: "点位运营", roles: ["平台支持", "租户管理员", "业务负责人", "运营负责人", "点位负责人", "机器人/设备运维", "现场维护员", "试运行操作员"], packages: ["点位运营包", "现场任务包", "设备查看包"], description: "需要管理或执行点位日常运营。" },
   devices: { permission: "设备查看", roles: ["平台支持", "业务负责人", "运营负责人", "点位负责人", "机器人/设备运维", "设备运维负责人", "现场维护员", "审计员", "试运行操作员"], packages: ["设备查看包", "设备运维包", "设备高危命令包", "审计查看包"], description: "需要查看设备状态、事件、日志和命令记录。" },
   catalog: { permission: "商品服务管理", roles: ["平台支持", "业务负责人", "运营负责人", "商品/配置管理员", "场景模板管理员", "配置发布人", "配置审批人", "审计员"], packages: ["商品服务管理包", "场景模板配置包", "配置发布包", "审计查看包"], description: "需要查看或维护商品/服务、SKU 和可售范围。" },
+  resources: { permission: "资源耗材管理", roles: ["平台支持", "业务负责人", "运营负责人", "点位负责人", "商品/配置管理员", "现场维护员", "机器人/设备运维", "审计员"], packages: ["商品服务管理包", "点位运营包", "现场任务包", "设备运维包", "审计查看包"], description: "需要维护资源、料仓、效期、批次、补料、报损或现场作业。" },
   orders: { permission: "订单处理", roles: ["平台支持", "业务负责人", "运营负责人", "点位负责人", "客服/售后", "退款审批人", "财务/结算", "审计员", "试运行操作员"], packages: ["订单处理包", "客服售后包", "退款发起包", "退款审批包", "审计查看包"], description: "需要查看交易和履约请求上下文。" },
   incidents: { permission: "异常处理", roles: ["平台支持", "业务负责人", "运营负责人", "点位负责人", "客服/售后", "机器人/设备运维", "现场维护员", "商品/配置管理员", "审计员", "试运行操作员"], packages: ["异常处理包", "客服售后包", "设备运维包", "现场任务包", "审计查看包"], description: "需要分派、处理、关闭或复盘异常。" },
   tasks: { permission: "现场任务", roles: ["平台支持", "业务负责人", "运营负责人", "点位负责人", "现场维护员", "机器人/设备运维", "客服/售后", "试运行操作员"], packages: ["现场任务包", "设备运维包", "客服售后包"], description: "需要承接异常、维护、客服或人工确认任务。" },
   releases: { permission: "配置发布", roles: ["平台支持", "业务负责人", "运营负责人", "商品/配置管理员", "场景模板管理员", "配置发布人", "配置审批人", "审计员"], packages: ["配置发布包", "场景模板配置包", "审计查看包"], description: "需要查看、提交或审批配置发布。" },
   reports: { permission: "报表查看", roles: ["平台支持", "租户管理员", "业务负责人", "运营负责人", "财务/结算", "数据查看员", "审计员"], packages: ["工作台查看包", "报表查看包", "报表导出包", "审计查看包"], description: "需要查看经营、设备、异常和接口同步复盘。" },
   roles: { permission: "权限自检", roles: ["平台支持", "租户管理员", "业务负责人", "运营负责人", "审计员"], packages: ["用户权限管理包", "审计查看包"], description: "需要查看当前账号权限来源、审批队列和风险授权。" },
+  integrations: { permission: "集成与开放平台", roles: ["平台支持", "租户管理员", "业务负责人", "集成管理员", "开发者", "审计员"], packages: ["用户权限管理包", "配置发布包", "审计查看包"], description: "需要管理开发者授权、OpenAPI、MQTT、事件订阅或数据同步。" },
 };
 
 export type BadgeTone = "ok" | "warn" | "bad" | "info" | "neutral";
@@ -261,7 +263,10 @@ export type AppAction =
   | { type: "create-incident"; payload: IncidentCreatePayload }
   | { type: "task"; taskId: string; action: TaskWorkflowAction; payload?: TaskActionPayload }
   | { type: "sync-api-operation"; operationId: string }
-  | { type: "rollback-api-operation"; operationId: string };
+  | { type: "rollback-api-operation"; operationId: string }
+  | { type: "platform-toggle-tenant"; tenantId: string }
+  | { type: "platform-toggle-user"; userId: string }
+  | { type: "feature-audit"; action: string; object: string; risk: AuditLog["risk"]; result: string; detail: string };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   const next = structuredClone(state);
@@ -368,6 +373,34 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return next;
     case "rollback-api-operation":
       rollbackApiOperation(next, action.operationId);
+      return next;
+    case "platform-toggle-tenant": {
+      if (!currentUserRoles(next).includes("平台支持")) {
+        addAuditLog(next, "变更企业状态", action.tenantId, "L4", "已拒绝", "仅平台支持可变更企业状态");
+        return next;
+      }
+      const tenant = next.tenants.find((item) => item.id === action.tenantId);
+      if (!tenant) return state;
+      tenant.status = tenant.status === "启用" ? "停用" : "启用";
+      addAuditLog(next, "变更企业状态", tenant.id, "L4", "成功", `${tenant.name} → ${tenant.status}`);
+      return next;
+    }
+    case "platform-toggle-user": {
+      if (!currentUserRoles(next).includes("平台支持")) {
+        addAuditLog(next, "变更账号状态", action.userId, "L4", "已拒绝", "仅平台支持可变更平台账号状态");
+        return next;
+      }
+      const account = next.users.find((item) => item.id === action.userId);
+      if (!account || account.id === next.currentUserId) {
+        addAuditLog(next, "变更账号状态", action.userId, "L4", "已拒绝", "账号不存在或不能停用当前登录账号");
+        return next;
+      }
+      account.status = account.status === "启用" ? "停用" : "启用";
+      addAuditLog(next, "变更账号状态", account.id, "L4", "成功", `${account.name} → ${account.status}；停用后现有会话需重新鉴权`);
+      return next;
+    }
+    case "feature-audit":
+      addAuditLog(next, action.action, action.object, action.risk, action.result, action.detail);
       return next;
     default:
       return state;

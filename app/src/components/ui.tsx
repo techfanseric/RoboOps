@@ -70,7 +70,7 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: TableRow
                 }
               }}
             >
-              {record.cells.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
+              {record.cells.map((cell, cellIndex) => <td key={cellIndex} data-label={headers[cellIndex]}>{cell}</td>)}
             </tr>
             );
           })}

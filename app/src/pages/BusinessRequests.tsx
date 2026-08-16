@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { AppState } from "../types/core";
 import { filteredBusinessRequests } from "../services/operations";
 import { Badge, DataTable, DetailLink, NameCell, Section } from "../components/ui";
@@ -10,7 +11,12 @@ export function BusinessRequests({ state }: { state: AppState }) {
   const defaultSelected = requests.find((request) => request.status === "exception" || request.status === "refund_pending") || requests[0];
   const selected = requests.find((request) => request.id === selectedId) || defaultSelected;
   return (
-    <div className="split-detail">
+    <>
+      <div className="section-tabs" aria-label="订单业务视图">
+        <Link className="tab-link active" to="/orders">订单概览</Link>
+        <Link className="tab-link" to="/orders/operations">点位订单与执行</Link>
+      </div>
+      <div className="split-detail">
       <Section title="订单/服务请求" meta="状态、支付确认、负责人和最近更新">
         <DataTable headers={["编号", "点位", "场景", "状态", "支付/确认", "金额", "负责人", "更新", "详情"]} rows={requests.map((request) => ({
           key: request.id,
@@ -21,6 +27,7 @@ export function BusinessRequests({ state }: { state: AppState }) {
         }))} />
       </Section>
       <RequestDetail state={state} request={selected} />
-    </div>
+      </div>
+    </>
   );
 }

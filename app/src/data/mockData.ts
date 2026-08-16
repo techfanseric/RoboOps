@@ -33,6 +33,8 @@ export const staticData: StaticData = {
     { id: "usr-015", name: "辛然", role: "试运行操作员", scope: "深圳湾展厅 A 点", status: "启用", login: "今天 09:05" },
     { id: "usr-016", name: "罗晋", role: "场景模板管理员", scope: "RoboTea Lab / 深圳", status: "启用", login: "今天 09:28" },
     { id: "usr-017", name: "邱行", role: "设备运维负责人", scope: "星舟具身智能 / 全部品牌", status: "启用", login: "今天 09:33" },
+    { id: "usr-020", name: "方衡", role: "集成管理员", scope: "星舟具身智能 / 全部品牌", status: "启用", login: "今天 09:18" },
+    { id: "usr-021", name: "许工", role: "开发者", scope: "星舟具身智能 / 现场运营助手", status: "启用", login: "今天 08:48" },
   ],
   templates: [
     {
@@ -136,6 +138,8 @@ export const staticData: StaticData = {
     { name: "数据查看员", scope: "品牌/区域", packages: ["工作台查看包", "报表查看包"], risk: "只读，不编辑和审批" },
     { name: "审计员", scope: "租户/品牌", packages: ["审计查看包", "报表查看包"], risk: "只读，检查权限和高风险动作" },
     { name: "试运行操作员", scope: "试运行/展会", packages: ["工作台查看包", "点位运营包", "订单处理包", "异常处理包", "现场任务包"], risk: "只使用限定点位和试运行数据，不触碰真实高风险设备命令" },
+    { name: "集成管理员", scope: "租户/企业", packages: ["用户权限管理包", "配置发布包", "审计查看包"], risk: "企业级凭证和授权变更必须二次确认并留痕" },
+    { name: "开发者", scope: "企业/授权应用", packages: ["配置发布包"], risk: "只查看和维护本人获授权的申请、凭证与订阅" },
   ],
 };
 
