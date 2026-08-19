@@ -1,6 +1,7 @@
-import { FilePenLine, Send } from "lucide-react";
+import { CircleAlert, FilePenLine, Send } from "lucide-react";
 import type { Dispatch } from "react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { staticData } from "../data/mockData";
 import { configReleaseActionPolicy, releaseVisibleForCurrentUser, templateVisibleForCurrentUser, type AppAction } from "../services/operations";
 import type { AppState, ScenarioTemplate } from "../types/core";
@@ -14,6 +15,10 @@ export function ScenarioTemplates({ state, dispatch }: { state: AppState; dispat
 
   return (
     <>
+      <div className="note-box template-status-link">
+        <div><strong>状态与异常已集中配置</strong><span>场景模板继续描述业务对象；结构化状态、异常触发、SLA、发布与逐设备结果统一进入状态与异常中心。</span></div>
+        <Link className="text-button" to="/incidents"><CircleAlert className="lucide-icon" /> 打开状态与异常中心</Link>
+      </div>
       <div className="grid two">
         {templates.map((template) => (
           <Section

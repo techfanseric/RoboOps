@@ -12,7 +12,7 @@ import { Points } from "./pages/Points";
 import { Devices } from "./pages/Devices";
 import { Catalog } from "./pages/Catalog";
 import { BusinessRequests } from "./pages/BusinessRequests";
-import { Incidents } from "./pages/Incidents";
+import { StatusIncidentCenterPage } from "./features/statusCenter";
 import { Tasks } from "./pages/Tasks";
 import { ConfigReleases } from "./pages/ConfigReleases";
 import { Reports } from "./pages/Reports";
@@ -167,7 +167,7 @@ export function App() {
         <Route path="/orders" element={<MenuGuard state={state} viewId="orders"><BusinessRequests state={state} /></MenuGuard>} />
         <Route path="/orders/operations" element={<MenuGuard state={state} viewId="orders"><OrderOperationsPage appState={state} snapshot={orderSnapshot} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/orders/:requestId" element={<MenuGuard state={state} viewId="orders"><RequestDetailRoute state={state} /></MenuGuard>} />
-        <Route path="/incidents" element={<MenuGuard state={state} viewId="incidents"><Incidents state={state} dispatch={dispatch} /></MenuGuard>} />
+        <Route path="/incidents" element={<MenuGuard state={state} viewId="incidents"><StatusIncidentCenterPage state={state} appDispatch={dispatch} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/incidents/:incidentId" element={<MenuGuard state={state} viewId="incidents"><IncidentDetailRoute state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/tasks" element={<MenuGuard state={state} viewId="tasks"><Tasks state={state} dispatch={dispatch} /></MenuGuard>} />
         <Route path="/tasks/:taskId" element={<MenuGuard state={state} viewId="tasks"><TaskDetailRoute state={state} dispatch={dispatch} /></MenuGuard>} />
