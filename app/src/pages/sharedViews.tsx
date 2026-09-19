@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ArrowRight, Check, ListPlus, Play, Power, Receipt, RefreshCcw, Undo2, UploadCloud, X } from "lucide-react";
 import type { Dispatch, ReactNode } from "react";
 import { useState } from "react";
@@ -105,6 +106,7 @@ export function IncidentActions({ state, dispatch, incident }: { state: AppState
       <div className="actions">
         {actions.map(([action, icon]) => {
           const policy = incidentActionPolicy(state, incident, action);
+          if (action === "refund") return incident.order !== "-" ? <Link key={action} className="icon-button" title="退款 / 退单管理" aria-label="退款 / 退单管理" to={`/orders/refunds?order=${encodeURIComponent(incident.order)}`} onClick={(event) => event.stopPropagation()}>{icon}</Link> : null;
           return (
             <IconButton key={action} title={policy.allowed ? policy.label : policy.message} disabled={!policy.allowed} onClick={() => setPendingAction(action)}>
               {icon}

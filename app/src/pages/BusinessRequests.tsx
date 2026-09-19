@@ -15,6 +15,7 @@ export function BusinessRequests({ state }: { state: AppState }) {
       <div className="section-tabs" aria-label="订单业务视图">
         <Link className="tab-link active" to="/orders">订单概览</Link>
         <Link className="tab-link" to="/orders/operations">点位订单与执行</Link>
+        <Link className="tab-link" to="/orders/refunds">退款 / 退单管理</Link>
       </div>
       <div className="split-detail">
       <Section title="订单/服务请求" meta="状态、支付确认、负责人和最近更新">

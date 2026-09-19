@@ -1,0 +1,318 @@
+.refund-page {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.refund-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.refund-heading h2 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+  letter-spacing: -0.5px;
+}
+.refund-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.refund-context,
+.refund-table-top,
+.refund-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.refund-context {
+  padding: 10px 12px;
+  background: var(--surface-soft);
+  border-radius: 6px;
+}
+.refund-quick {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.refund-quick button {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.refund-quick button.active {
+  background: var(--teal-soft);
+  color: var(--teal);
+  border-color: var(--teal);
+}
+.refund-filters {
+  display: grid;
+  grid-template-columns: 2fr 1.4fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+.refund-more {
+  font-size: 12px;
+  color: var(--muted);
+}
+.refund-more summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.refund-more .refund-filters {
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 12px;
+}
+.refund-table {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.refund-table table {
+  min-width: 1050px;
+}
+.refund-table th,
+.refund-table td {
+  padding: 14px 10px;
+}
+.refund-table small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+.refund-table input[type="checkbox"],
+.refund-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+}
+.refund-order-link {
+  background: none;
+  border: 0;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 0;
+  text-align: left;
+}
+.refund-order-link:hover {
+  text-decoration: underline;
+}
+.refund-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.refund-pagination {
+  justify-content: flex-end;
+}
+.refund-selection {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.refund-selection strong {
+  font-size: 14px;
+}
+.refund-selection span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+.refund-table-top select {
+  padding: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 4px;
+  color: var(--text);
+}
+.refund-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: 88vh;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.refund-dialog.wide {
+  width: min(880px, calc(100vw - 32px));
+}
+.refund-dialog[open] {
+  display: grid;
+  gap: 20px;
+}
+.refund-dialog::backdrop {
+  background: rgba(20, 32, 30, 0.35);
+}
+.refund-dialog p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.refund-dialog .table-wrap {
+  max-height: 340px;
+  overflow: auto;
+}
+.refund-dialog .drawer-actions {
+  position: sticky;
+  bottom: -24px;
+  background: var(--surface);
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.refund-confirm-summary {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+.refund-confirm-summary strong {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.refund-confirm-summary span,
+.refund-help {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.refund-amount-input {
+  max-width: 100px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.refund-log {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.refund-log small {
+  color: var(--muted);
+}
+.refund-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.refund-page button:focus-visible,
+.refund-dialog button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
+@media (max-width: 900px) {
+  .refund-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .refund-selection {
+    flex-wrap: wrap;
+    bottom: 8px;
+  }
+  .refund-more .refund-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .refund-context {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 560px) {
+  .refund-heading {
+    align-items: flex-start;
+  }
+  .refund-heading h2 {
+    font-size: 21px;
+  }
+  .refund-filters {
+    grid-template-columns: 1fr;
+  }
+  .refund-dialog {
+    padding: 16px;
+  }
+  .refund-selection .actions {
+    flex-wrap: wrap;
+  }
+}
+.refund-page .actions,
+.refund-dialog .actions {
+  display: flex;
+  flex-wrap: wrap;
+  width: auto;
+  max-width: none;
+  align-items: center;
+  gap: 6px;
+}
+.refund-page .text-button,
+.refund-dialog .text-button {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.refund-table td:last-child {
+  min-width: 120px;
+}
+.refund-page .section-tabs {
+  margin: 0;
+  box-shadow: none;
+}
+.refund-page .field {
+  gap: 6px;
+}
+.refund-error {
+  background: var(--red-soft);
+  color: var(--red);
+  padding: 12px;
+  border-radius: 6px;
+}
+@media (max-width: 760px) {
+  .refund-table thead {
+    display: table-header-group;
+  }
+  .refund-table tbody {
+    display: table-row-group;
+  }
+  .refund-table tr {
+    display: table-row;
+  }
+  .refund-table th,
+  .refund-table td {
+    display: table-cell;
+  }
+  .refund-table td::before {
+    display: none;
+  }
+}
+.refund-result-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.refund-page .refund-table {
+  overflow-x: auto;
+}
+.refund-page .refund-table table {
+  display: table;
+}
+.refund-dialog .drawer-actions { position:static; }

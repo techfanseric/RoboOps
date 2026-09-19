@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { FilePlus2, Printer, RotateCw, Send, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge, DataTable, EmptyState, NameCell, Section } from "../../components/ui";
@@ -57,6 +58,7 @@ export function OrderOperationsPage({ appState, tenantId, snapshot, visiblePoint
 
   return (
     <>
+      <div className="section-tabs"><Link className="tab-link" to="/orders">订单概览</Link><Link className="tab-link active" to="/orders/operations">点位订单与执行</Link><Link className="tab-link" to="/orders/refunds">退款 / 退单管理</Link></div>
       <div className="section-tabs" role="tablist" aria-label="订单运营分组">
         {views.map((item) => <button className={view === item.id ? "active" : ""} type="button" role="tab" aria-selected={view === item.id} key={item.id} onClick={() => setView(item.id)}>{item.label}</button>)}
       </div>
@@ -92,7 +94,7 @@ export function OrderOperationsPage({ appState, tenantId, snapshot, visiblePoint
                   <span className="actions">
                     <button className="text-button" type="button" disabled={!access.canOperateOrders || order.dispatchState !== "未下发"} onClick={(event) => { event.stopPropagation(); const audit = { action: "下发订单", object: order.orderNo, risk: "L3" as const, detail: "首次下发 / retry=false" }; if (confirmAction(`确认向设备下发订单 ${order.orderNo}？`, audit)) run(() => mutate((current) => dispatchOrder(current, order.id, false, undefined, access.operator)), "订单下发记录已生成", audit); }}><Send className="lucide-icon" />下发</button>
                     <button className="text-button" type="button" disabled={!access.canOperateOrders || order.dispatchState === "未下发"} onClick={(event) => { event.stopPropagation(); const audit = { action: "重发订单", object: order.orderNo, risk: "L3" as const, detail: "显式重发 / retry=true" }; if (confirmAction(`确认显式重发订单 ${order.orderNo}？该动作会记录 retry=true。`, audit)) run(() => mutate((current) => dispatchOrder(current, order.id, true, undefined, access.operator)), "显式重发记录已生成", audit); }}><RotateCw className="lucide-icon" />重发</button>
-                    <button className="text-button danger-action" type="button" disabled={!access.canOperateOrders || order.refundState === "退单下发成功"} onClick={(event) => { event.stopPropagation(); const audit = { action: "下发退单", object: order.orderNo, risk: "L3" as const, detail: "设备退单指令" }; if (confirmAction(`确认向设备下发退单 ${order.orderNo}？成功后不可重复。`, audit)) run(() => mutate((current) => dispatchRefund(current, order.id, undefined, access.operator)), "退单已通过独立事件下发", audit); }}><Undo2 className="lucide-icon" />退单</button>
+                    <button className="text-button danger-action" type="button" disabled={!access.canOperateOrders || order.refundState === "退单下发成功"} onClick={(event) => { event.stopPropagation(); const audit = { action: "下发退单", object: order.orderNo, risk: "L3" as const, detail: "设备退单指令" }; if (confirmAction(`确认向设备下发退单 ${order.orderNo}？此操作只取消履约，不退回支付金额。成功后不可重复。`, audit)) run(() => mutate((current) => dispatchRefund(current, order.id, undefined, access.operator)), "退单已通过独立事件下发", audit); }}><Undo2 className="lucide-icon" />退单</button>
                   </span>,
                 ],
               }))}

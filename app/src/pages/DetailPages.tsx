@@ -188,7 +188,7 @@ export function RequestDetailRoute({ state }: { state: AppState }) {
         <Section title="请求概况" meta="支付、履约和责任人">
           <DefinitionList rows={[["品牌", request.brand], ["点位", point ? <DetailLink to={`/points/${point.id}`} title={`打开${point.name}详情`} /> : request.point], ["场景", request.scenario], ["支付/确认", <Badge value={request.paid} />], ["金额", request.amount ? `¥${request.amount}` : "-"], ["负责人", request.owner]]} />
         </Section>
-        <Section title="执行对象" meta="设备、异常和退款状态">
+        <Section title="执行对象" meta="设备、异常和退款状态" action={<Link className="text-button" to={`/orders/refunds?order=${encodeURIComponent(request.id)}`}>退款 / 退单管理</Link>}>
           <DefinitionList rows={[["执行设备", device ? <DetailLink to={`/devices/${device.id}`} title={`打开${device.name}详情`} /> : request.device], ["关联异常", incidents.length ? incidents.map((incident) => <DetailLink key={incident.id} to={`/incidents/${incident.id}`} title={`打开${incident.id}详情`} />) : "-"], ["退款记录", refunds.length ? refunds.map((refund) => <Badge key={refund.id} value={`${refund.id} ${refund.status}`} />) : "-"]]} />
         </Section>
       </div>

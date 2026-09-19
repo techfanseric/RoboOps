@@ -11,6 +11,7 @@ import { ScenarioTemplates } from "./pages/ScenarioTemplates";
 import { Points } from "./pages/Points";
 import { Devices } from "./pages/Devices";
 import { Catalog } from "./pages/Catalog";
+import { RefundManagementPage } from "./features/refunds/RefundManagementPage";
 import { BusinessRequests } from "./pages/BusinessRequests";
 import { StatusIncidentCenterPage } from "./features/statusCenter";
 import { Tasks } from "./pages/Tasks";
@@ -166,6 +167,7 @@ export function App() {
         <Route path="/resources" element={<MenuGuard state={state} viewId="resources"><CatalogResourcesPage state={state} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/orders" element={<MenuGuard state={state} viewId="orders"><BusinessRequests state={state} /></MenuGuard>} />
         <Route path="/orders/operations" element={<MenuGuard state={state} viewId="orders"><OrderOperationsPage appState={state} snapshot={orderSnapshot} onAudit={recordFeatureAudit} /></MenuGuard>} />
+        <Route path="/orders/refunds" element={<MenuGuard state={state} viewId="orders"><RefundManagementPage appState={state} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/orders/:requestId" element={<MenuGuard state={state} viewId="orders"><RequestDetailRoute state={state} /></MenuGuard>} />
         <Route path="/incidents" element={<MenuGuard state={state} viewId="incidents"><StatusIncidentCenterPage state={state} appDispatch={dispatch} onAudit={recordFeatureAudit} /></MenuGuard>} />
         <Route path="/incidents/:incidentId" element={<MenuGuard state={state} viewId="incidents"><IncidentDetailRoute state={state} dispatch={dispatch} /></MenuGuard>} />
