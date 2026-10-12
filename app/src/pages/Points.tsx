@@ -1,4 +1,4 @@
-import { FilePenLine, Send } from "lucide-react";
+import { FilePenLine, Plus, Send } from "lucide-react";
 import type { Dispatch } from "react";
 import { useState } from "react";
 import type { AppState, Point, PointCheck } from "../types/core";
@@ -6,10 +6,16 @@ import { configReleaseActionPolicy, filteredPoints, pointDevices, pointIncidents
 import { Badge, DataTable, DetailLink, EmptyState, NameCell, Section } from "../components/ui";
 import { PointDetail } from "./sharedViews";
 
+import { PointCreateDrawer } from "../features/pointCreation/PointCreateDrawer";
+import { PointFieldConfigDrawer } from "../features/pointCreation/PointFieldConfigDrawer";
+import { pointCreationAllowed } from "../features/pointCreation/model";
+
 const defaultPointChecks = ["负责人完整", "设备在线", "商品可售", "异常规则", "营业确认"];
 const checkStatuses = ["已完成", "处理中", "待处理"];
 
 export function Points({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
+  const [configuring, setConfiguring] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Point | null>(null);
   const points = filteredPoints(state);
@@ -23,9 +29,13 @@ export function Points({ state, dispatch }: { state: AppState; dispatch: Dispatc
           title="点位列表"
           meta="营业状态、上线准入、设备和日常指标"
           action={
+            <div className="point-list-actions">
+            <button className="text-button" type="button" disabled={!pointCreationAllowed(state)} onClick={() => setConfiguring(true)}>字段配置</button>
+            <button className="text-button primary-action" type="button" disabled={!pointCreationAllowed(state)} title={pointCreationAllowed(state) ? "创建待上线点位" : "当前角色无新增点位权限"} onClick={() => setCreating(true)}><Plus className="lucide-icon" /> 新增点位</button>
             <button className="text-button primary-action" type="button" disabled={!selected || !releasePolicy.allowed} title={releasePolicy.message} onClick={() => selected && setEditing(selected)}>
               <FilePenLine className="lucide-icon" /> 申请变更
             </button>
+            </div>
           }
         >
           {points.length ? (
@@ -39,7 +49,7 @@ export function Points({ state, dispatch }: { state: AppState; dispatch: Dispatc
                   selected: selected?.id === point.id,
                   onClick: () => setSelectedId(point.id),
                   label: `查看${point.name}`,
-                  cells: [<NameCell primary={point.name} secondary={point.city} />, point.brand, point.scenario, <Badge value={point.status} />, <Badge value={pointReadiness(state, point).status} />, `${online}/${devices.length}`, pointRequests(state, point.name).length, pointIncidents(state, point.name).length, point.owner, <DetailLink to={`/points/${point.id}`} title={`打开${point.name}详情`} />],
+                  cells: [<NameCell primary={point.name} secondary={[point.code, point.city].filter(Boolean).join(" · ")} />, point.brand, point.scenario, <Badge value={point.status} />, <Badge value={pointReadiness(state, point).status} />, `${online}/${devices.length}`, pointRequests(state, point.name).length, pointIncidents(state, point.name).length, point.owner, <DetailLink to={`/points/${point.id}`} title={`打开${point.name}详情`} />],
                 };
               })}
             />
@@ -67,6 +77,8 @@ export function Points({ state, dispatch }: { state: AppState; dispatch: Dispatc
         )}
       </Section>
 
+      {configuring ? <PointFieldConfigDrawer state={state} dispatch={dispatch} onClose={() => setConfiguring(false)} /> : null}
+      {creating ? <PointCreateDrawer state={state} dispatch={dispatch} onClose={() => setCreating(false)} onCreated={() => setSelectedId(null)} /> : null}
       {editing ? <PointChangeDrawer state={state} point={editing} dispatch={dispatch} onClose={() => setEditing(null)} /> : null}
     </>
   );

@@ -1,4 +1,4 @@
-export type PointStatus = "营业中" | "试运行" | "维护中" | "暂停营业";
+export type PointStatus = "营业中" | "试运行" | "维护中" | "暂停营业" | "待上线" | "筹备中";
 
 export interface PointProfile {
   id: string;

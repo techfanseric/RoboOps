@@ -1,0 +1,8 @@
+.action-drawer.wide.business-config-drawer { width: min(1100px, 94vw); }
+.business-specification { padding: 16px; margin-bottom: 14px; background: #f6faf9; border: 1px solid #dce7e3; border-radius: 12px; }
+.business-specification .product-inline { flex-wrap: wrap; align-items: center; }
+.business-specification .field { min-width: 150px; flex: 1; }
+.business-specification code { display: inline-block; max-width: 210px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: #62756d; }
+.business-option { padding: 8px 0; border-top: 1px solid #e1e9e6; }
+.business-template-apply { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; padding: 14px; background: #eef7f3; border-radius: 10px; }
+.business-template-apply .field { flex: 1; min-width: 220px; }

@@ -1,4 +1,8 @@
 import { staticData } from "../data/mockData";
+import { createPoint, type PointCreatePayload } from "../features/pointCreation/model";
+import { savePointFieldTemplate, type PointFieldTemplate } from "../features/pointCreation/config";
+import { handleProductAction, syncProductVariants } from "../features/products/domain";
+import type { ProductAction } from "../features/products/types";
 import type {
   AppState,
   ApiOperation,
@@ -237,6 +241,9 @@ export interface TeamAssignmentLifecyclePayload {
 }
 
 export type AppAction =
+  | { type: "save-point-field-template"; payload: PointFieldTemplate }
+  | ProductAction
+  | { type: "create-point"; payload: PointCreatePayload }
   | { type: "login"; identifier: string; password: string }
   | { type: "logout" }
   | { type: "expire-session" }
@@ -269,7 +276,20 @@ export type AppAction =
   | { type: "feature-audit"; action: string; object: string; risk: AuditLog["risk"]; result: string; detail: string };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
+  if (action.type === "save-point-field-template") return savePointFieldTemplate(state, action.payload);
+  if (action.type === "create-point") return createPoint(state, action.payload);
   const next = structuredClone(state);
+  if (action.type === "product-save" || action.type === "product-batch" || action.type === "product-template-save") {
+    handleProductAction(next, action, {
+      allowed: currentUserHasBusinessAccess(next) && configReleaseActionPolicy(next).allowed,
+      actor: currentUser(next).name,
+      visibleItemIds: next.catalog.filter((item) => catalogItemVisibleForCurrentUser(next, item.id)).map((item) => item.id),
+      visibleBrandNames: filteredBrands(next).map((brand) => brand.name),
+      visiblePointIds: next.points.filter((point) => pointVisibleForCurrentUser(next, point)).map((point) => point.id),
+      now: currentTime(),
+    });
+    return next;
+  }
   switch (action.type) {
     case "login":
       login(next, action.identifier, action.password);
@@ -911,9 +931,10 @@ function scopeMatchesPoint(state: AppState, scope: string, point: Point): boolea
   const explicitPointNames = state.points.filter((item) => scopeHasToken(scope, item.name)).map((item) => item.name);
   if (explicitPointNames.length) return explicitPointNames.includes(point.name);
   if (scopeHasToken(scope, point.name)) return true;
-  if (scopeHasToken(scope, point.brand) && (scopeHasToken(scope, point.city) || scope.includes("全部") || !scope.includes(" / "))) return true;
+  const cityMatches = scope.split(/[/、,，]/).some((part) => part.trim().replace(/市$/, "") === point.city.replace(/市$/, ""));
+  if (scopeHasToken(scope, point.brand) && (cityMatches || scope.includes("全部") || !scope.includes(" / "))) return true;
   if (tenant && scope.includes(tenant) && scope.includes("全部品牌")) return true;
-  if (tenant && scope.includes(tenant) && scopeHasToken(scope, point.city)) return true;
+  if (tenant && scope.includes(tenant) && cityMatches) return true;
   return false;
 }
 
@@ -1027,7 +1048,7 @@ export function filteredCatalogItems(state: AppState): CatalogItem[] {
   const visibleBrands = new Set(filterOptionsForCurrentUser(state).brands);
   return state.catalog.filter((item) => {
     const brandOk = state.filters.brand === "all" || item.brand === state.filters.brand;
-    return visibleBrands.has(item.brand) && brandOk;
+    return !item.product?.deletedAt && (visibleBrands.has(item.brand) || userHasGlobalScope(state)) && brandOk;
   });
 }
 
@@ -1088,11 +1109,18 @@ export function pointTasks(state: AppState, pointName: string) {
   return state.tasks.filter((task) => task.point === pointName && openTaskStatuses.has(task.status));
 }
 
+export function sellableVariantsAtPoint(state: AppState, pointName: string): ProductVariant[] {
+  const active = state.catalog.filter((item) => item.status === "上架" && !item.product?.deletedAt);
+  const activeNames = new Set(active.map((item) => item.name));
+  const activeIds = new Set(active.map((item) => item.id));
+  return state.productVariants.filter((variant) => (variant.productId ? activeIds.has(variant.productId) : activeNames.has(variant.product)) && variant.points.split("、").includes(pointName));
+}
+
 export function pointReadiness(state: AppState, point: Point): PointReadiness {
   const checks = state.pointChecks.filter((check) => check.point === point.name);
   const blockers = checks.filter((check) => check.status !== "已完成").map((check) => check.item);
   const devices = pointDevices(state, point.name);
-  const products = state.productVariants.filter((variant) => variant.points.includes(point.name));
+  const products = sellableVariantsAtPoint(state, point.name);
   if (!devices.length) blockers.push("绑定设备");
   if (!products.length) blockers.push("可售商品/服务");
   if (devices.length && !devices.some((device) => device.status === "在线" || device.status === "忙碌")) blockers.push("设备在线");
@@ -2083,6 +2111,10 @@ function submitCatalogChange(state: AppState, payload: CatalogChangePayload) {
   const actionPolicy = configReleaseActionPolicy(state);
   const item = state.catalog.find((catalogItem) => catalogItem.id === payload.itemId);
   if (!item) return;
+  if (!catalogItemVisibleForCurrentUser(state, item.id) || (item.product && !item.product.legacyVariants) || item.product?.deletedAt || state.catalogChanges.some((change) => change.itemId === item.id && change.status === "待审批")) {
+    addAuditLog(state, "提交商品配置", item.id, "L3", "已拒绝", "商品不在授权范围、已有待审批变更或应使用完整商品编辑页。");
+    return;
+  }
   if (!actionPolicy.allowed) {
     addAuditLog(state, actionPolicy.label, item.id, actionPolicy.risk, "已拒绝", actionPolicy.message);
     return;
@@ -2098,12 +2130,19 @@ function submitCatalogChange(state: AppState, payload: CatalogChangePayload) {
     flow: payload.flow.trim(),
   };
   const nextVariant: ProductVariant = {
+    productId: item.id,
     product: nextItem.name,
     sku: payload.variantSku.trim(),
     spec: payload.variantSpec.trim(),
     price: payload.variantPrice.trim(),
     points: payload.variantPoints.trim(),
   };
+  if (nextItem.product?.legacyVariants) {
+    nextItem.product = {
+      ...nextItem.product,
+      legacyVariants: nextItem.product.legacyVariants.map((variant) => variant.sku === currentVariant?.sku ? nextVariant : { ...variant, product: nextItem.name, productId: item.id }),
+    };
+  }
   const id = `REL-${String(state.releases.length + 1).padStart(3, "0")}`;
   const scope = catalogReleaseScopeSelection(state, item, payload.variantPoints);
   const release: ReleaseRecord = {
@@ -2143,6 +2182,10 @@ function submitPointChange(state: AppState, payload: PointChangePayload) {
   const actionPolicy = configReleaseActionPolicy(state);
   const point = state.points.find((item) => item.id === payload.pointId);
   if (!point) return;
+  if (!pointVisibleForCurrentUser(state, point) || state.pointChanges.some((change) => change.pointId === point.id && change.status === "待审批")) {
+    addAuditLog(state, "提交点位配置", point.id, "L3", "已拒绝", "点位不在授权范围或已有待审批变更。");
+    return;
+  }
   if (!actionPolicy.allowed) {
     addAuditLog(state, actionPolicy.label, point.id, actionPolicy.risk, "已拒绝", actionPolicy.message);
     return;
@@ -2566,7 +2609,9 @@ function applyCatalogChange(state: AppState, releaseId: string, approved: boolea
   }
   const catalogIndex = state.catalog.findIndex((item) => item.id === change.itemId);
   if (catalogIndex >= 0) state.catalog[catalogIndex] = change.afterItem;
-  if (change.afterVariant) {
+  if (change.afterItem.product) {
+    syncProductVariants(state, change.afterItem, change.beforeItem.name);
+  } else if (change.afterVariant) {
     const variantIndex = state.productVariants.findIndex((variant) => variant.sku === change.afterVariant?.sku || variant.product === change.beforeItem.name);
     if (variantIndex >= 0) state.productVariants[variantIndex] = change.afterVariant;
     else state.productVariants.unshift(change.afterVariant);

@@ -51,15 +51,15 @@ export function appPointsToOrderPoints(appState: AppState, groupId: string): Poi
     id: point.id,
     groupId,
     name: point.name,
-    code: point.id,
+    code: point.code || point.id,
     thirdPartyCode: `UNMAPPED-${point.id}`,
-    province: "待补充",
+    province: point.province || "待补充",
     city: point.city,
-    district: "待补充",
-    address: "待补充",
-    longitude: 0,
-    latitude: 0,
-    status: (["营业中", "试运行", "维护中", "暂停营业"].includes(point.status) ? point.status : "维护中") as PointProfile["status"],
+    district: point.area || "待补充",
+    address: point.address || "待补充",
+    longitude: point.lng ?? 0,
+    latitude: point.lat ?? 0,
+    status: (["营业中", "试运行", "维护中", "暂停营业", "待上线", "筹备中"].includes(point.status) ? point.status : "维护中") as PointProfile["status"],
   }));
 }
 
