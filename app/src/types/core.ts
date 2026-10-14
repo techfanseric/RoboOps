@@ -126,7 +126,16 @@ export interface Device {
   capability: string[];
 }
 
+export interface ProductCategory {
+  id: string;
+  brand: string;
+  name: string;
+  sortOrder: number;
+  enabled: boolean;
+}
+
 export interface CatalogItem {
+  categoryId?: string;
   id: string;
   name: string;
   type: string;
@@ -268,6 +277,7 @@ export interface ReleaseDiff {
 }
 
 export interface CatalogChange {
+  categoryOnly?: boolean;
   release: string;
   itemId: string;
   beforeItem: CatalogItem;
@@ -505,6 +515,7 @@ export interface ScopeSelection {
 }
 
 export interface AppState extends MutableData {
+  productCategories?: ProductCategory[];
   productTemplates?: ProductTemplate[];
   pointFieldTemplates?: PointFieldTemplate[];
   auth: AuthState;

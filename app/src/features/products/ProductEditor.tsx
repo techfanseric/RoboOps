@@ -8,6 +8,9 @@ import { SpecificationFields } from "./SpecificationFields";
 import "./business-config.css";
 import type { ProductConfiguration } from "./types";
 
+import { CategoryField } from "./ProductCategories";
+import { validateProductCategory } from "./categories";
+
 export function ProductEditor({ state, item, mode, dispatch, onClose }: { state: AppState; item?: CatalogItem; mode: "edit" | "publish" | "prices"; dispatch: Dispatch<AppAction>; onClose: (notice?: string) => void }) {
   const brands = filteredBrands(state).filter((brand) => state.filters.brand === "all" || brand.name === state.filters.brand);
   const [draft, setDraft] = useState<CatalogItem>(() => { const base = item || { id: "", name: "", type: "饮品商品", brand: brands[0]?.name || "", status: "草稿", attrs: [], flow: "饮品亭履约模板" }; return { ...base, product: createProductConfiguration(base, state) }; });
@@ -27,7 +30,7 @@ export function ProductEditor({ state, item, mode, dispatch, onClose }: { state:
   const changeGroups = (groups: ProductConfiguration["optionGroups"]) => updateConfig({ optionGroups: groups, prices: buildPriceMatrix(groups, archivedPrices()), priceArchive: archivedPrices() });
   const submit = (publish: boolean) => {
     const publishing = publish || item?.status === "上架";
-    const nextErrors = validateProduct(draft, publishing);
+    const nextErrors = [...validateProduct(draft, publishing), ...validateProductCategory(state, draft, item)];
     if (publishing && !reason.trim()) nextErrors.push("提交发布需填写变更原因");
     if (!policy.allowed) nextErrors.push(policy.message);
     if (state.catalog.some((row) => row.id !== item?.id && row.name.trim() === draft.name.trim())) nextErrors.push("商品名称已存在，请使用不同名称");
@@ -47,8 +50,9 @@ export function ProductEditor({ state, item, mode, dispatch, onClose }: { state:
         {errors.length > 0 && <div className="product-errors" role="alert"><strong>请检查以下信息</strong><ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul></div>}
         {step === "basic" && <div className="form-grid">
           <label className="field full"><span>商品名 <small>{characterCount(draft.name)}/{rules.nameMax} 字</small></span><input aria-label="商品名" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="例如：燕麦拿铁"/></label>
-          <label className="field"><span>品牌</span><select value={draft.brand} disabled={Boolean(item)} onChange={(event) => { const base = { ...draft, brand: event.target.value, product: undefined }; const defaults = createProductConfiguration(base, state); setDraft({ ...base, product: { ...defaults, sellingPoints: config.sellingPoints, introduction: config.introduction, images: config.images, pointIds: [] } }); }}>{brands.map((brand) => <option key={brand.id}>{brand.name}</option>)}</select></label>
+          <label className="field"><span>品牌</span><select value={draft.brand} disabled={Boolean(item)} onChange={(event) => { const base = { ...draft, brand: event.target.value, categoryId: undefined, product: undefined }; const defaults = createProductConfiguration(base, state); setDraft({ ...base, product: { ...defaults, sellingPoints: config.sellingPoints, introduction: config.introduction, images: config.images, pointIds: [] } }); }}>{brands.map((brand) => <option key={brand.id}>{brand.name}</option>)}</select></label>
           <label className="field"><span>商品类型</span><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })}>{Array.from(new Set(["饮品商品", "机器人服务", ...state.catalog.map((row) => row.type)])).map((type) => <option key={type}>{type}</option>)}</select></label>
+          <CategoryField state={state} brand={draft.brand} value={draft.categoryId} retainedId={item?.categoryId} onChange={categoryId => setDraft({ ...draft, categoryId })}/>
           <div className="field full"><span>商品卖点 <small>{rules.sellingPointMin}–{rules.sellingPointMax} 条，每条最多 {rules.sellingPointLength} 个字</small></span><div className="product-selling-points">{config.sellingPoints.map((value, index) => <div className="product-inline" key={index}><input aria-label={`卖点 ${index + 1}`} value={value} placeholder={`卖点 ${index + 1}`} onChange={(event) => updateConfig({ sellingPoints: config.sellingPoints.map((row, rowIndex) => rowIndex === index ? event.target.value : row) })}/><small>{characterCount(value)}/{rules.sellingPointLength}</small><button className="text-button" type="button" aria-label={`删除卖点 ${index + 1}`} disabled={config.sellingPoints.length <= rules.sellingPointMin} onClick={() => updateConfig({ sellingPoints: config.sellingPoints.filter((_, rowIndex) => rowIndex !== index) })}>移除</button></div>)}</div><button className="text-button" type="button" disabled={config.sellingPoints.length >= rules.sellingPointMax} onClick={() => updateConfig({ sellingPoints: [...config.sellingPoints, ""] })}>＋ 添加卖点</button></div>
           <label className="field full"><span>商品简介 <small>{characterCount(config.introduction)}/{rules.introductionMax} 字</small></span><textarea aria-label="商品简介" value={config.introduction} rows={3} placeholder="描述口味、原料与商品特色" onChange={(event) => updateConfig({ introduction: event.target.value })}/></label>
         </div>}

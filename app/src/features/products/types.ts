@@ -1,4 +1,4 @@
-import type { CatalogItem, ProductVariant } from "../../types/core";
+import type { CatalogItem, ProductVariant, ProductCategory } from "../../types/core";
 
 export interface ProductOptionGroup { id: string; name: string; options: string[]; affectsPrice: boolean; optionIds?: string[]; disabledOptionIds?: string[]; required?: boolean; enabled?: boolean }
 export interface ProductPrice { key: string; selections: Record<string, string>; original: string; promotional: string }
@@ -24,6 +24,8 @@ export interface ProductConfiguration {
 }
 export type ProductOperation = "publish" | "unpublish" | "delete" | "restore";
 export type ProductAction =
+  | { type: "product-category-save"; payload: { category: ProductCategory; reason: string } }
+  | { type: "product-category-assign"; payload: { itemId: string; categoryId?: string; reason: string } }
   | { type: "product-template-save"; payload: { template: ProductTemplate; reason: string } }
   | { type: "product-save"; payload: { item: CatalogItem; reason: string; publish: boolean } }
   | { type: "product-batch"; payload: { ids: string[]; operation: ProductOperation; reason: string } };

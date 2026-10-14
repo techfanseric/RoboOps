@@ -2,6 +2,7 @@ import { staticData } from "../data/mockData";
 import { createPoint, type PointCreatePayload } from "../features/pointCreation/model";
 import { savePointFieldTemplate, type PointFieldTemplate } from "../features/pointCreation/config";
 import { handleProductAction, syncProductVariants } from "../features/products/domain";
+import { categoryLabel, validateProductCategory } from "../features/products/categories";
 import type { ProductAction } from "../features/products/types";
 import type {
   AppState,
@@ -128,6 +129,7 @@ export interface ReleaseRollbackPayload {
 }
 
 export interface CatalogChangePayload {
+  categoryId?: string;
   itemId: string;
   name: string;
   status: string;
@@ -279,7 +281,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   if (action.type === "save-point-field-template") return savePointFieldTemplate(state, action.payload);
   if (action.type === "create-point") return createPoint(state, action.payload);
   const next = structuredClone(state);
-  if (action.type === "product-save" || action.type === "product-batch" || action.type === "product-template-save") {
+  if (action.type === "product-category-save" || action.type === "product-category-assign" || action.type === "product-save" || action.type === "product-batch" || action.type === "product-template-save") {
     handleProductAction(next, action, {
       allowed: currentUserHasBusinessAccess(next) && configReleaseActionPolicy(next).allowed,
       actor: currentUser(next).name,
@@ -1540,7 +1542,12 @@ export function releaseRollbackActionPolicy(state: AppState, releaseId: string):
   const activeRollback = release ? state.releases.find((item) => item.rollbackOf === release.id && item.status !== "已驳回") : undefined;
   const statusAllowed = release?.status === "已发布";
   const notRollbackRelease = !release?.rollbackOf;
-  const allowed = Boolean(release && basePolicy.allowed && visible && reversible && statusAllowed && notRollbackRelease && !activeRollback);
+  const catalogChange = state.catalogChanges.find(change => change.release === releaseId && change.status === "已生效");
+  const pendingCatalogChange = catalogChange && state.catalogChanges.some(change => change.itemId === catalogChange.itemId && change.status === "待审批");
+  const currentCatalogItem = catalogChange && state.catalog.find(item => item.id === catalogChange.itemId);
+  const categoryUnavailable = catalogChange?.categoryOnly && (!currentCatalogItem || Boolean(currentCatalogItem.product?.deletedAt));
+  const categorySuperseded = catalogChange?.categoryOnly && currentCatalogItem?.categoryId !== catalogChange.afterItem.categoryId;
+  const allowed = Boolean(release && basePolicy.allowed && visible && reversible && statusAllowed && notRollbackRelease && !activeRollback && !pendingCatalogChange && !categorySuperseded && !categoryUnavailable);
   let message = "提交后会创建配置回退审批，通过后按原发布的 before/after 反向应用。";
   if (!release) message = "发布记录不存在。";
   else if (!basePolicy.allowed) message = basePolicy.message;
@@ -1549,6 +1556,9 @@ export function releaseRollbackActionPolicy(state: AppState, releaseId: string):
   else if (!notRollbackRelease) message = "回退发布不再继续回退；需要调整时请提交新的配置发布。";
   else if (activeRollback) message = `该发布已有回退记录 ${activeRollback.id}，当前状态为${activeRollback.status}。`;
   else if (!reversible) message = "该发布没有可自动回退的配置对象，请通过新建发布提交修正。";
+  else if (pendingCatalogChange) message = "该商品已有待审批变更，请完成审批后再申请回退。";
+  else if (categoryUnavailable) message = "商品不存在或已删除，请先恢复商品后再调整分类。";
+  else if (categorySuperseded) message = "商品分类已在此发布后调整，请从商品归类入口提交新的调整。";
   return {
     label: "申请配置回退",
     risk: "L3",
@@ -1722,6 +1732,11 @@ export function auditLogVisibleForCurrentUser(state: AppState, log: AuditLog): b
   const user = currentUser(state);
   if (userHasGlobalScope(state)) return true;
   if (log.operator === user.name || log.operator === "当前用户") return true;
+  const category = state.productCategories?.find(row => row.id === log.object);
+  if (category) {
+    const brand = state.brands.find(row => row.name === category.brand);
+    return brand ? brandVisibleForCurrentUser(state, brand) : false;
+  }
   if (log.object.startsWith("REL-")) return releaseVisibleForCurrentUser(state, log.object);
   if (log.object.startsWith("INC-")) return incidentVisibleForCurrentUser(state, log.object);
   if (log.object.startsWith("TSK-")) return taskVisibleForCurrentUser(state, log.object);
@@ -2125,10 +2140,16 @@ function submitCatalogChange(state: AppState, payload: CatalogChangePayload) {
   const nextItem: CatalogItem = {
     ...item,
     name: payload.name.trim(),
+    categoryId: "categoryId" in payload ? payload.categoryId || undefined : item.categoryId,
     status: payload.status.trim(),
     attrs: payload.attrs.map((attr) => attr.trim()).filter(Boolean),
     flow: payload.flow.trim(),
   };
+  const categoryErrors = validateProductCategory(state, nextItem, item);
+  if (categoryErrors.length) {
+    addAuditLog(state, "提交商品配置", item.id, "L3", "已拒绝", categoryErrors.join("；"));
+    return;
+  }
   const nextVariant: ProductVariant = {
     productId: item.id,
     product: nextItem.name,
@@ -2157,8 +2178,8 @@ function submitCatalogChange(state: AppState, payload: CatalogChangePayload) {
   const diff: ReleaseDiff = {
     release: id,
     object: `商品/服务 ${item.name}`,
-    before: summarizeCatalogConfig(item, currentVariant),
-    after: summarizeCatalogConfig(nextItem, nextVariant),
+    before: summarizeCatalogConfig(state, item, currentVariant),
+    after: summarizeCatalogConfig(state, nextItem, nextVariant),
     impact: payload.variantPoints.trim(),
   };
   const change: CatalogChange = {
@@ -2608,10 +2629,11 @@ function applyCatalogChange(state: AppState, releaseId: string, approved: boolea
     return;
   }
   const catalogIndex = state.catalog.findIndex((item) => item.id === change.itemId);
-  if (catalogIndex >= 0) state.catalog[catalogIndex] = change.afterItem;
-  if (change.afterItem.product) {
+  if (catalogIndex >= 0) state.catalog[catalogIndex] = change.categoryOnly ? { ...state.catalog[catalogIndex], categoryId: change.afterItem.categoryId } : change.afterItem;
+  // Classification approvals and rollbacks only update the category association.
+  if (!change.categoryOnly && change.afterItem.product) {
     syncProductVariants(state, change.afterItem, change.beforeItem.name);
-  } else if (change.afterVariant) {
+  } else if (!change.categoryOnly && change.afterVariant) {
     const variantIndex = state.productVariants.findIndex((variant) => variant.sku === change.afterVariant?.sku || variant.product === change.beforeItem.name);
     if (variantIndex >= 0) state.productVariants[variantIndex] = change.afterVariant;
     else state.productVariants.unshift(change.afterVariant);
@@ -2722,6 +2744,7 @@ function createRollbackChange(state: AppState, sourceReleaseId: string, rollback
     state.catalogChanges.unshift({
       release: rollbackReleaseId,
       itemId: catalogChange.itemId,
+      categoryOnly: catalogChange.categoryOnly,
       beforeItem: currentItem,
       afterItem: catalogChange.beforeItem,
       beforeVariant: currentVariant || catalogChange.afterVariant,
@@ -2972,8 +2995,8 @@ function requestStatusLabel(request: BusinessRequest, status: string): string {
   return labels[request.scenario]?.[status] || status;
 }
 
-function summarizeCatalogConfig(item: CatalogItem, variant?: ProductVariant): string {
-  const parts = [`状态：${item.status}`, `属性：${item.attrs.join("、") || "-"}`, `履约：${item.flow}`];
+function summarizeCatalogConfig(state: AppState, item: CatalogItem, variant?: ProductVariant): string {
+  const parts = [`状态：${item.status}`, `分类：${categoryLabel(state, item.categoryId)} [${item.categoryId || "无"}]`, `属性：${item.attrs.join("、") || "-"}`, `履约：${item.flow}`];
   if (variant) parts.push(`SKU：${variant.sku}`, `价格：${variant.price}`, `可售点位：${variant.points}`);
   return parts.join("；");
 }

@@ -1,3 +1,4 @@
+import { CategoryApprovalSummary } from "../features/products/CategoryApprovalSummary";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ListPlus, Play, Power, Receipt, RefreshCcw, Undo2, UploadCloud, X } from "lucide-react";
 import type { Dispatch, ReactNode } from "react";
@@ -481,6 +482,7 @@ export function ReleaseDetail({ state, release, dispatch }: { state: AppState; r
         <ReleaseRollbackActions state={state} release={release} dispatch={dispatch} />
         <div>
           <h4 className="subhead">差异查看</h4>
+          <CategoryApprovalSummary state={state} releaseId={release.id}/>
           <DataTable headers={["对象", "发布前", "发布后", "影响范围"]} rows={diffs.map((diff) => [diff.object, diff.before, diff.after, diff.impact])} />
         </div>
       </div>

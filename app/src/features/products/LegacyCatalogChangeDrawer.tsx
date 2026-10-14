@@ -2,12 +2,16 @@ import { Send } from "lucide-react";
 import { useState, type Dispatch } from "react";
 import { Badge } from "../../components/ui";
 import { configReleaseActionPolicy, filteredPoints, type AppAction } from "../../services/operations";
+import { CategoryField } from "./ProductCategories";
+import { validateProductCategory } from "./categories";
 import type { AppState, CatalogItem } from "../../types/core";
 
 export function LegacyCatalogChangeDrawer({ state, item, dispatch, onClose }: { state: AppState; item: CatalogItem; dispatch: Dispatch<AppAction>; onClose: () => void }) {
   const currentVariant = state.productVariants.find((variant) => variant.product === item.name);
   const policy = configReleaseActionPolicy(state);
   const points = filteredPoints(state);
+  const [categoryId, setCategoryId] = useState(item.categoryId);
+  const [categoryError, setCategoryError] = useState("");
   const [name, setName] = useState(item.name);
   const [status, setStatus] = useState(item.status);
   const [attrs, setAttrs] = useState(item.attrs.join("\n"));
@@ -38,10 +42,13 @@ export function LegacyCatalogChangeDrawer({ state, item, dispatch, onClose }: { 
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSubmit) return;
+            const errors = validateProductCategory(state, { ...item, categoryId }, item);
+            if (errors.length) { setCategoryError(errors.join("；")); return; }
             dispatch({
               type: "submit-catalog-change",
               payload: {
                 itemId: item.id,
+                categoryId,
                 name,
                 status,
                 attrs: attrs.split(/\n|、|,/).map((attr) => attr.trim()).filter(Boolean),
@@ -56,7 +63,9 @@ export function LegacyCatalogChangeDrawer({ state, item, dispatch, onClose }: { 
             onClose();
           }}
         >
+          {categoryError && <div role="alert" className="product-errors">{categoryError}</div>}
           <div className="form-grid">
+            <CategoryField state={state} brand={item.brand} value={categoryId} retainedId={item.categoryId} onChange={setCategoryId}/>
             <label className="field">
               <span>名称</span>
               <input value={name} onChange={(event) => setName(event.target.value)} />

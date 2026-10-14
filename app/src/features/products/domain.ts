@@ -1,6 +1,8 @@
 import type { AppState, CatalogItem, ProductVariant } from "../../types/core";
 import type { ProductAction, ProductActionContext, ProductConfiguration, ProductOptionGroup, ProductPrice, ProductRules, ProductTemplate } from "./types";
 
+import { categoryLabel, validateCategory, validateProductCategory } from "./categories";
+
 export const PRODUCT_RULES = { nameMax: 15, sellingPointMin: 2, sellingPointMax: 4, sellingPointLength: 8, introductionMax: 50, imageMin: 1, imageMax: 3, imageMaxBytes: 5 * 1024 * 1024, optionMax: 8, groupMax: 6, matrixMax: 64 };
 export const DEFAULT_OPTION_GROUPS: ProductOptionGroup[] = [
   { id: "sweetness", name: "甜度", options: ["无糖", "少糖", "正常糖"], affectsPrice: false },
@@ -127,19 +129,20 @@ function nextId(prefix: string, existing: string[]) {
 function recordAudit(state: AppState, context: ProductActionContext, action: string, object: string, result: string, detail: string) {
   state.auditLogs.unshift({ id: nextId("AUD", state.auditLogs.map((row) => row.id)), time: context.now, operator: context.actor, action, object, risk: "L3", result, detail });
 }
-function stageChange(state: AppState, before: CatalogItem, after: CatalogItem, reason: string, context: ProductActionContext) {
+function stageChange(state: AppState, before: CatalogItem, after: CatalogItem, reason: string, context: ProductActionContext, categoryOnly = false) {
   const id = nextId("REL", state.releases.map((row) => row.id));
   const brand = state.brands.find((row) => row.name === after.brand);
   const summarize = (item: CatalogItem) => {
+    if (categoryOnly) return `${item.name}；品牌 ${item.brand}；${item.status}；分类 ${categoryLabel(state, item.categoryId)} [${item.categoryId || "无"}]`;
     const config = item.product;
     const rules = config?.rules || PRODUCT_RULES;
     const groups = config ? normalizeGroups(config.optionGroups).map(group => `${group.name}（${group.enabled === false ? "停用" : "启用"}、${group.required ? "必需" : "可选"}、${group.affectsPrice ? "参与计价" : "不参与计价"}）：${group.options.map((option, index) => `${option}${group.disabledOptionIds?.includes(group.optionIds![index]) ? "[停用]" : "[启用]"}`).join(" / ")}`).join("；") || "无规格 / 统一价格" : "历史规格";
     const points = config?.pointIds.map(id => state.points.find(point => point.id === id)?.name || id).join("、") || "未配置";
-    return `${item.name}；${item.status}；${config?.deletedAt ? "已删除" : "正常"}；类型 ${item.type}；履约 ${item.flow}；规格 ${groups}；规则 商品名≤${rules.nameMax}字，卖点${rules.sellingPointMin}–${rules.sellingPointMax}条 / 每条≤${rules.sellingPointLength}字，简介≤${rules.introductionMax}字，图片${rules.imageMin}–${rules.imageMax}张；${config?.prices.map(price => `${selectionLabel(config.optionGroups, price.selections)} ¥${price.original}${price.promotional ? ` / 活动 ¥${price.promotional}` : ""}`).join("、") || "历史配置"}；卖点 ${config?.sellingPoints.join("、") || "-"}；简介 ${config?.introduction || "-"}；图片 ${config?.images.map(image => `${image.name} [${image.id}]`).join("、") || "无"}；可售点位 ${points}`;
+    return `${item.name}；${item.status}；${config?.deletedAt ? "已删除" : "正常"}；类型 ${item.type}；分类 ${categoryLabel(state, item.categoryId)} [${item.categoryId || "无"}]；履约 ${item.flow}；规格 ${groups}；规则 商品名≤${rules.nameMax}字，卖点${rules.sellingPointMin}–${rules.sellingPointMax}条 / 每条≤${rules.sellingPointLength}字，简介≤${rules.introductionMax}字，图片${rules.imageMin}–${rules.imageMax}张；${config?.prices.map(price => `${selectionLabel(config.optionGroups, price.selections)} ¥${price.original}${price.promotional ? ` / 活动 ¥${price.promotional}` : ""}`).join("、") || "历史配置"}；卖点 ${config?.sellingPoints.join("、") || "-"}；简介 ${config?.introduction || "-"}；图片 ${config?.images.map(image => `${image.name} [${image.id}]`).join("、") || "无"}；可售点位 ${points}`;
   };
-  state.releases.unshift({ id, name: `商品配置变更：${after.name}`, scope: after.brand, scopeRef: { type: "brand", id: brand?.id || after.brand, label: after.brand, value: `${brand?.tenant || "品牌"} / ${after.brand}`, parent: brand?.tenant }, status: "待审批", by: context.actor, time: context.now });
+  state.releases.unshift({ id, name: `${categoryOnly ? "商品分类" : "商品配置"}变更：${after.name}`, scope: after.brand, scopeRef: { type: "brand", id: brand?.id || after.brand, label: after.brand, value: `${brand?.tenant || "品牌"} / ${after.brand}`, parent: brand?.tenant }, status: "待审批", by: context.actor, time: context.now });
   state.releaseDiffs.unshift({ release: id, object: `商品 ${after.name}`, before: summarize(before), after: summarize(after), impact: after.product?.pointIds.map((pointId) => state.points.find((point) => point.id === pointId)?.name).filter(Boolean).join("、") || "商品目录" });
-  state.catalogChanges.unshift({ release: id, itemId: before.id, beforeItem: structuredClone(before), afterItem: structuredClone(after), reason, status: "待审批" });
+  state.catalogChanges.unshift({ release: id, itemId: before.id, categoryOnly, beforeItem: structuredClone(before), afterItem: structuredClone(after), reason, status: "待审批" });
   state.approvalRequests.unshift({ id: nextId("APR", state.approvalRequests.map((row) => row.id)), time: context.now, action: "配置发布", target: id, requester: context.actor, approver: "配置审批人", rule: "影响点位经营时必须审批", status: "待审批", risk: "L3" });
   recordAudit(state, context, "提交商品配置发布", after.id, "待审批", `${reason}；发布 ${id}`);
 }
@@ -149,6 +152,33 @@ export function handleProductAction(state: AppState, action: ProductAction, cont
   if (!context.allowed) return fail("当前账号无商品配置权限");
   const pending = (id: string) => state.catalogChanges.some((change) => change.itemId === id && change.status === "待审批");
   const reason = action.payload.reason.trim();
+  if (action.type === "product-category-save") {
+    const category = structuredClone(action.payload.category);
+    const errors = validateCategory(state, category, context.visibleBrandNames);
+    if (!reason) errors.push("请填写变更原因");
+    if (errors.length) return fail(errors.join("；"));
+    category.name = category.name.trim();
+    const existing = state.productCategories?.find(row => row.id === category.id);
+    state.productCategories = [...(state.productCategories || []).filter(row => row.id !== category.id), category];
+    recordAudit(state, context, "保存商品分类", category.id, "成功", `${reason}；${existing ? `${existing.name} / ${existing.enabled ? "启用" : "停用"} / 排序 ${existing.sortOrder}` : "新增"} → ${category.name} / ${category.enabled ? "启用" : "停用"} / 排序 ${category.sortOrder}；品牌 ${category.brand}`);
+    return { message: "分类已保存，历史关联保留" };
+  }
+  if (action.type === "product-category-assign") {
+    const before = state.catalog.find(row => row.id === action.payload.itemId);
+    if (!before || !context.visibleItemIds.includes(before.id) || !context.visibleBrandNames.includes(before.brand)) return fail("商品超出当前权限范围");
+    if (before.product?.deletedAt || pending(before.id)) return fail("商品已删除或已有待审批变更");
+    const after = { ...structuredClone(before), categoryId: action.payload.categoryId || undefined };
+    const errors = validateProductCategory(state, after, before);
+    if (before.status === "上架" && !reason) errors.push("提交发布需填写变更原因");
+    if (errors.length) return fail(errors.join("；"));
+    if (before.categoryId === after.categoryId) return fail("商品分类未改变");
+    if (before.status === "上架") stageChange(state, before, after, reason, context, true);
+    else {
+      state.catalog[state.catalog.findIndex(row => row.id === before.id)] = after;
+      recordAudit(state, context, "商品归类", before.id, "成功", `${reason || "商品归类"}；${categoryLabel(state, before.categoryId)} [${before.categoryId || "无"}] → ${categoryLabel(state, after.categoryId)} [${after.categoryId || "无"}]`);
+    }
+    return { message: before.status === "上架" ? "分类变更已提交审批" : "商品分类已保存" };
+  }
   if (action.type === "product-template-save") {
     const template = structuredClone(action.payload.template);
     if (!context.visibleBrandNames.includes(template.brand)) return fail("模板品牌超出当前权限范围");
@@ -173,7 +203,7 @@ export function handleProductAction(state: AppState, action: ProductAction, cont
     if (input.product?.pointIds.some((id) => !context.visiblePointIds.includes(id) || state.points.find((point) => point.id === id)?.brand !== input.brand)) return fail("可售点位超出当前权限范围或不属于商品品牌");
     if (existing?.product && input.product) input.product.priceSkuIds = { ...(input.product.priceSkuIds || {}), ...priceSkuIdsForItem(state, existing) };
     const publishing = action.payload.publish || existing?.status === "上架";
-    const errors = validateProduct(input, publishing);
+    const errors = [...validateProduct(input, publishing), ...validateProductCategory(state, input, existing)];
     if (errors.length) return fail(errors.join("；"));
     if (publishing && !reason) return fail("提交发布需填写变更原因");
     if (state.catalog.some((row) => row.id !== existing?.id && row.name.trim() === input.name.trim())) return fail("商品名称已存在，请使用不同名称");

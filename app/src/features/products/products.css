@@ -57,3 +57,4 @@
 .product-confirm { width:min(540px,100vw); }
 .product-confirm-summary { background:#f5f8f6; padding:14px; border-radius:8px; font-size:13px; line-height:1.8; }
 @media(max-width:700px) { .product-stats { grid-template-columns:repeat(2,1fr); } .product-spec-row { grid-template-columns:1fr; } .product-spec-row > button { grid-column:auto; } .product-image-grid { grid-template-columns:repeat(2,1fr); } .product-point-grid { grid-template-columns:1fr; } }
+.product-toolbar select { max-width:100%; padding:10px 12px; border:1px solid #dbe4e1; border-radius:8px; background:white; }

@@ -1,3 +1,4 @@
+import { CategoryApprovalSummary } from "../features/products/CategoryApprovalSummary";
 import { ArrowLeft } from "lucide-react";
 import type { Dispatch, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -303,6 +304,7 @@ export function ReleaseDetailRoute({ state, dispatch }: { state: AppState; dispa
       <Section title="配置差异" meta="发布前后变化和影响范围">
         <DataTable headers={["对象", "发布前", "发布后", "影响范围"]} rows={diffs.map((diff) => [diff.object, diff.before, diff.after, diff.impact])} />
       </Section>
+      <CategoryApprovalSummary state={state} releaseId={release.id}/>
       <Section title="审批记录" meta="配置发布的审批状态和处理意见">
         <DataTable headers={["时间", "动作", "发起人", "审批人", "状态", "处理"]} rows={approvals.map((approval) => [approval.time, approval.action, approval.requester, approval.approver, <Badge value={approval.status} />, <ApprovalActions state={state} approval={approval} dispatch={dispatch} />])} />
       </Section>
