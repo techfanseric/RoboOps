@@ -124,7 +124,7 @@ function PointProfiles({ state, canOperate, onSave }: { state: ReturnType<typeof
           <label className="field"><span>点位名称</span><input value={draft.name} onChange={(event) => change("name", event.target.value)} /></label>
           <label className="field"><span>点位编码</span><input value={draft.code} onChange={(event) => change("code", event.target.value)} /></label>
           <label className="field"><span>第三方点位编码</span><input value={draft.thirdPartyCode} onChange={(event) => change("thirdPartyCode", event.target.value)} /></label>
-          <label className="field"><span>营业状态</span><select value={draft.status} onChange={(event) => change("status", event.target.value)}>{["试运行", "营业中", "维护中", "暂停营业"].map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label className="field"><span>营业状态</span><select value={draft.status} onChange={(event) => change("status", event.target.value)}>{["待上线", "筹备中", "试运行", "营业中", "维护中", "暂停营业"].map((value) => <option key={value}>{value}</option>)}</select></label>
           <label className="field"><span>省</span><input value={draft.province} onChange={(event) => change("province", event.target.value)} /></label>
           <label className="field"><span>市</span><input value={draft.city} onChange={(event) => change("city", event.target.value)} /></label>
           <label className="field"><span>区</span><input value={draft.district} onChange={(event) => change("district", event.target.value)} /></label>

@@ -1,3 +1,4 @@
+import { createProductConfiguration } from "../products/domain";
 import { describe, expect, it } from "vitest";
 import { deviceOpsSeed } from "./seed";
 import { deviceOpsReducer, validateMaintenancePlan } from "./domain";
@@ -49,5 +50,6 @@ it("启动同步只包含当前点位可用商品、配方和所需物料工艺�
   const bootstrap = buildDeviceBootstrap(state, device.sn, [product], resources);
   expect(bootstrap.products).toHaveLength(1); expect(bootstrap.recipes.length).toBeGreaterThan(0); expect(bootstrap.materials.length).toBeGreaterThan(0); expect(bootstrap.processes.length).toBeGreaterThan(0);
   expect(buildDeviceBootstrap(state, device.sn, [{ ...product, deletedAt: new Date().toISOString() }], resources).recipes).toHaveLength(0);
+  expect(buildDeviceBootstrap(state, device.sn, [{ ...product, product: { ...createProductConfiguration(), deletedAt: new Date().toISOString() } }], resources).products).toHaveLength(0);
   expect(buildDeviceBootstrap(state, device.sn, [product], resources, [{ product: product.name, sku: "TEA", spec: "热", price: "10", points: "其他门店" }]).products).toHaveLength(0);
 });

@@ -47,7 +47,7 @@ export function buildDeviceBootstrap(state: DeviceOpsState, sn: string, catalog:
   if (!model) throw new Error("设备型号不存在或已停用。");
   const point = resources?.points.find((item) => item.id === device.pointId);
   const pointName = state.points.find((item) => item.id === device.pointId)?.name;
-  const products = catalog.filter((item) => !item.deletedAt && item.status === "上架" && (!variants || variants.some((variant) => (variant.catalogItemId ? variant.catalogItemId === item.id : variant.product === item.name) && variant.points.split("、").includes(pointName || ""))));
+  const products = catalog.filter((item) => !item.deletedAt && !item.product?.deletedAt && item.status === "上架" && (!variants || variants.some((variant) => ((variant.productId || variant.catalogItemId) ? (variant.productId || variant.catalogItemId) === item.id : variant.product === item.name) && variant.points.split("、").includes(pointName || ""))));
   const formulas = resources?.formulas.filter((item) => item.status === "启用" && products.some((product) => product.name === item.productName || product.id === item.productCode) && resources.processPlans.some((process) => process.id === item.processId && process.status === "启用") && (item.scope === "全国" || item.targets.includes(device.pointId!) || item.targets.includes(point?.name || "") || (item.scope === "区域" && item.targets.includes(point?.region || "")))) || [];
   return {
     schemaVersion: 1, sn: device.sn, tenantId: state.tenantId, pointId: device.pointId,

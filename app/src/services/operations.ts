@@ -1,4 +1,10 @@
+import { productNameConflict } from "../features/products/domain";
 import { staticData } from "../data/mockData";
+import { createPoint, type PointCreatePayload } from "../features/pointCreation/model";
+import { savePointFieldTemplate, type PointFieldTemplate } from "../features/pointCreation/config";
+import { handleProductAction, syncProductVariants } from "../features/products/domain";
+import { categoryLabel, validateProductCategory } from "../features/products/categories";
+import type { ProductAction } from "../features/products/types";
 import type {
   AppState,
   ApiOperation,
@@ -124,8 +130,7 @@ export interface ReleaseRollbackPayload {
 }
 
 export interface CatalogChangePayload {
-  sellingPoints?: string[];
-  introduction?: string;
+  categoryId?: string;
   itemId: string;
   name: string;
   status: string;
@@ -239,6 +244,9 @@ export interface TeamAssignmentLifecyclePayload {
 }
 
 export type AppAction =
+  | { type: "save-point-field-template"; payload: PointFieldTemplate }
+  | ProductAction
+  | { type: "create-point"; payload: PointCreatePayload }
   | { type: "login"; identifier: string; password: string }
   | { type: "logout" }
   | { type: "expire-session" }
@@ -250,7 +258,6 @@ export type AppAction =
   | { type: "revoke-team-assignment"; payload: TeamAssignmentLifecyclePayload }
   | { type: "create-release"; payload: ConfigReleasePayload }
   | { type: "submit-release-rollback"; payload: ReleaseRollbackPayload }
-  | { type: "catalog-lifecycle"; payload: { itemId: string; operation: "recycle" | "restore" | "purge" } }
   | { type: "submit-catalog-change"; payload: CatalogChangePayload }
   | { type: "submit-point-change"; payload: PointChangePayload }
   | { type: "submit-template-change"; payload: ScenarioTemplateChangePayload }
@@ -272,7 +279,20 @@ export type AppAction =
   | { type: "feature-audit"; action: string; object: string; risk: AuditLog["risk"]; result: string; detail: string };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
+  if (action.type === "save-point-field-template") return savePointFieldTemplate(state, action.payload);
+  if (action.type === "create-point") return createPoint(state, action.payload);
   const next = structuredClone(state);
+  if (action.type === "product-purge" || action.type === "product-category-save" || action.type === "product-category-assign" || action.type === "product-save" || action.type === "product-batch" || action.type === "product-template-save") {
+    handleProductAction(next, action, {
+      allowed: currentUserHasBusinessAccess(next) && configReleaseActionPolicy(next).allowed,
+      actor: currentUser(next).name,
+      visibleItemIds: next.catalog.filter((item) => catalogItemVisibleForCurrentUser(next, item.id)).map((item) => item.id),
+      visibleBrandNames: filteredBrands(next).map((brand) => brand.name),
+      visiblePointIds: next.points.filter((point) => pointVisibleForCurrentUser(next, point)).map((point) => point.id),
+      now: currentTime(),
+    });
+    return next;
+  }
   switch (action.type) {
     case "login":
       login(next, action.identifier, action.password);
@@ -315,20 +335,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       submitReleaseRollback(next, action.payload);
       recordApiOperation(next, action);
       return next;
-    case "catalog-lifecycle": {
-      const item = next.catalog.find((entry) => entry.id === action.payload.itemId);
-      if (!item || !configReleaseActionPolicy(next).allowed || !catalogItemVisibleForCurrentUser(next, item.id)) return state;
-      const operation = action.payload.operation;
-      const pending = next.catalogChanges.some((change) => change.itemId === item.id && change.status === "待审批");
-      const error = pending ? "存在待审批变更，请先处理后再操作。" : operation === "restore" ? validateCatalogContent(next.catalog, { ...item, deletedAt: undefined }) : "";
-      if (error) { addAuditLog(next, "商品回收站", item.id, "L3", "已拒绝", error); return next; }
-      if (operation === "recycle" && !item.deletedAt) { next.productVariants = next.productVariants.map((variant) => !variant.catalogItemId && variant.product === item.name ? { ...variant, catalogItemId: item.id } : variant); item.deletedAt = new Date().toISOString(); item.status = "草稿"; }
-      else if (operation === "restore" && item.deletedAt) { delete item.deletedAt; item.status = "草稿"; }
-      else if (operation === "purge" && item.deletedAt) { next.catalog = next.catalog.filter((entry) => entry.id !== item.id); next.productVariants = next.productVariants.filter((variant) => variant.catalogItemId !== item.id); }
-      else return state;
-      addAuditLog(next, { recycle: "移入回收站", restore: "恢复商品", purge: "永久删除商品" }[operation], item.id, "L3", "成功", "保留历史订单和配置审计；恢复后为草稿");
-      return next;
-    }
     case "submit-catalog-change":
       submitCatalogChange(next, action.payload);
       recordApiOperation(next, action);
@@ -928,9 +934,10 @@ function scopeMatchesPoint(state: AppState, scope: string, point: Point): boolea
   const explicitPointNames = state.points.filter((item) => scopeHasToken(scope, item.name)).map((item) => item.name);
   if (explicitPointNames.length) return explicitPointNames.includes(point.name);
   if (scopeHasToken(scope, point.name)) return true;
-  if (scopeHasToken(scope, point.brand) && (scopeHasToken(scope, point.city) || scope.includes("全部") || !scope.includes(" / "))) return true;
+  const cityMatches = scope.split(/[/、,，]/).some((part) => part.trim().replace(/市$/, "") === point.city.replace(/市$/, ""));
+  if (scopeHasToken(scope, point.brand) && (cityMatches || scope.includes("全部") || !scope.includes(" / "))) return true;
   if (tenant && scope.includes(tenant) && scope.includes("全部品牌")) return true;
-  if (tenant && scope.includes(tenant) && scopeHasToken(scope, point.city)) return true;
+  if (tenant && scope.includes(tenant) && cityMatches) return true;
   return false;
 }
 
@@ -1044,7 +1051,7 @@ export function filteredCatalogItems(state: AppState): CatalogItem[] {
   const visibleBrands = new Set(filterOptionsForCurrentUser(state).brands);
   return state.catalog.filter((item) => {
     const brandOk = state.filters.brand === "all" || item.brand === state.filters.brand;
-    return visibleBrands.has(item.brand) && brandOk;
+    return !item.product?.deletedAt && (visibleBrands.has(item.brand) || userHasGlobalScope(state)) && brandOk;
   });
 }
 
@@ -1072,11 +1079,10 @@ export function commandVisibleForCurrentUser(state: AppState, commandId: string)
 }
 
 export function filteredProductVariants(state: AppState): ProductVariant[] {
-  const liveCatalog = filteredCatalogItems(state).filter((item) => !item.deletedAt);
-  const catalogNames = new Set(liveCatalog.map((item) => item.name));
+  const catalogNames = new Set(filteredCatalogItems(state).map((item) => item.name));
   const points = filteredPoints(state).map((point) => point.name);
   return state.productVariants.filter((variant) => {
-    if (variant.catalogItemId ? !liveCatalog.some((item) => item.id === variant.catalogItemId) : !catalogNames.has(variant.product)) return false;
+    if (!catalogNames.has(variant.product)) return false;
     if (state.filters.point !== "all" && !variant.points.includes(state.filters.point)) return false;
     return points.some((point) => variant.points.includes(point));
   });
@@ -1106,11 +1112,18 @@ export function pointTasks(state: AppState, pointName: string) {
   return state.tasks.filter((task) => task.point === pointName && openTaskStatuses.has(task.status));
 }
 
+export function sellableVariantsAtPoint(state: AppState, pointName: string): ProductVariant[] {
+  const active = state.catalog.filter((item) => item.status === "上架" && !item.product?.deletedAt);
+  const activeNames = new Set(active.map((item) => item.name));
+  const activeIds = new Set(active.map((item) => item.id));
+  return state.productVariants.filter((variant) => (variant.productId ? activeIds.has(variant.productId) : activeNames.has(variant.product)) && variant.points.split("、").includes(pointName));
+}
+
 export function pointReadiness(state: AppState, point: Point): PointReadiness {
   const checks = state.pointChecks.filter((check) => check.point === point.name);
   const blockers = checks.filter((check) => check.status !== "已完成").map((check) => check.item);
   const devices = pointDevices(state, point.name);
-  const products = state.productVariants.filter((variant) => variant.points.includes(point.name));
+  const products = sellableVariantsAtPoint(state, point.name);
   if (!devices.length) blockers.push("绑定设备");
   if (!products.length) blockers.push("可售商品/服务");
   if (devices.length && !devices.some((device) => device.status === "在线" || device.status === "忙碌")) blockers.push("设备在线");
@@ -1530,7 +1543,12 @@ export function releaseRollbackActionPolicy(state: AppState, releaseId: string):
   const activeRollback = release ? state.releases.find((item) => item.rollbackOf === release.id && item.status !== "已驳回") : undefined;
   const statusAllowed = release?.status === "已发布";
   const notRollbackRelease = !release?.rollbackOf;
-  const allowed = Boolean(release && basePolicy.allowed && visible && reversible && statusAllowed && notRollbackRelease && !activeRollback);
+  const catalogChange = state.catalogChanges.find(change => change.release === releaseId && change.status === "已生效");
+  const pendingCatalogChange = catalogChange && state.catalogChanges.some(change => change.itemId === catalogChange.itemId && change.status === "待审批");
+  const currentCatalogItem = catalogChange && state.catalog.find(item => item.id === catalogChange.itemId);
+  const categoryUnavailable = catalogChange?.categoryOnly && (!currentCatalogItem || Boolean(currentCatalogItem.product?.deletedAt));
+  const categorySuperseded = catalogChange?.categoryOnly && currentCatalogItem?.categoryId !== catalogChange.afterItem.categoryId;
+  const allowed = Boolean(release && basePolicy.allowed && visible && reversible && statusAllowed && notRollbackRelease && !activeRollback && !pendingCatalogChange && !categorySuperseded && !categoryUnavailable);
   let message = "提交后会创建配置回退审批，通过后按原发布的 before/after 反向应用。";
   if (!release) message = "发布记录不存在。";
   else if (!basePolicy.allowed) message = basePolicy.message;
@@ -1539,6 +1557,9 @@ export function releaseRollbackActionPolicy(state: AppState, releaseId: string):
   else if (!notRollbackRelease) message = "回退发布不再继续回退；需要调整时请提交新的配置发布。";
   else if (activeRollback) message = `该发布已有回退记录 ${activeRollback.id}，当前状态为${activeRollback.status}。`;
   else if (!reversible) message = "该发布没有可自动回退的配置对象，请通过新建发布提交修正。";
+  else if (pendingCatalogChange) message = "该商品已有待审批变更，请完成审批后再申请回退。";
+  else if (categoryUnavailable) message = "商品不存在或已删除，请先恢复商品后再调整分类。";
+  else if (categorySuperseded) message = "商品分类已在此发布后调整，请从商品归类入口提交新的调整。";
   return {
     label: "申请配置回退",
     risk: "L3",
@@ -1712,6 +1733,11 @@ export function auditLogVisibleForCurrentUser(state: AppState, log: AuditLog): b
   const user = currentUser(state);
   if (userHasGlobalScope(state)) return true;
   if (log.operator === user.name || log.operator === "当前用户") return true;
+  const category = state.productCategories?.find(row => row.id === log.object);
+  if (category) {
+    const brand = state.brands.find(row => row.name === category.brand);
+    return brand ? brandVisibleForCurrentUser(state, brand) : false;
+  }
   if (log.object.startsWith("REL-")) return releaseVisibleForCurrentUser(state, log.object);
   if (log.object.startsWith("INC-")) return incidentVisibleForCurrentUser(state, log.object);
   if (log.object.startsWith("TSK-")) return taskVisibleForCurrentUser(state, log.object);
@@ -2097,46 +2123,49 @@ function submitReleaseRollback(state: AppState, payload: ReleaseRollbackPayload)
   addAuditLog(state, "提交配置回退", id, "L3", "待审批", `来源发布 ${release.id}；${payload.reason.trim()}；审批单 ${approval.id}`);
 }
 
-export function validateCatalogContent(items: CatalogItem[], item: CatalogItem): string {
-  if (!item.name.trim()) return "商品名称不能为空。";
-  if ((item.sellingPoints || []).some((point) => !point.trim() || Array.from(point.trim()).length > 20)) return "每条卖点为 1–20 个字，可不填写。";
-  if (Array.from(item.introduction || "").length > 200) return "商品简介不能超过 200 个字。";
-  if (!item.deletedAt && items.some((other) => other.id !== item.id && !other.deletedAt && other.brand === item.brand && other.name.trim().toLocaleLowerCase() === item.name.trim().toLocaleLowerCase())) return "当前品牌存在同名商品（回收站除外）。";
-  return "";
-}
-
 function submitCatalogChange(state: AppState, payload: CatalogChangePayload) {
   const actionPolicy = configReleaseActionPolicy(state);
   const item = state.catalog.find((catalogItem) => catalogItem.id === payload.itemId);
   if (!item) return;
+  if (!catalogItemVisibleForCurrentUser(state, item.id) || (item.product && !item.product.legacyVariants) || item.product?.deletedAt || state.catalogChanges.some((change) => change.itemId === item.id && change.status === "待审批")) {
+    addAuditLog(state, "提交商品配置", item.id, "L3", "已拒绝", "商品不在授权范围、已有待审批变更或应使用完整商品编辑页。");
+    return;
+  }
   if (!actionPolicy.allowed) {
     addAuditLog(state, actionPolicy.label, item.id, actionPolicy.risk, "已拒绝", actionPolicy.message);
     return;
   }
-  const contentError = validateCatalogContent(state.catalog, { ...item, name: payload.name, sellingPoints: payload.sellingPoints, introduction: payload.introduction });
-  if (item.deletedAt || !catalogItemVisibleForCurrentUser(state, item.id) || contentError) {
-    addAuditLog(state, "商品变更", item.id, "L3", "已拒绝", contentError || "商品已回收或不在授权范围。"); return;
-  }
   const user = currentUser(state);
   const policy = staticData.approvalPolicies.find((approvalPolicy) => approvalPolicy.action.includes("配置"));
-  const currentVariant = state.productVariants.find((variant) => variant.catalogItemId === item.id || (!variant.catalogItemId && variant.product === item.name));
+  const currentVariant = state.productVariants.find((variant) => variant.product === item.name || variant.sku === payload.variantSku);
   const nextItem: CatalogItem = {
     ...item,
     name: payload.name.trim(),
-    sellingPoints: payload.sellingPoints ?? item.sellingPoints ?? [],
-    introduction: payload.introduction ?? item.introduction ?? "",
+    categoryId: "categoryId" in payload ? payload.categoryId || undefined : item.categoryId,
     status: payload.status.trim(),
     attrs: payload.attrs.map((attr) => attr.trim()).filter(Boolean),
     flow: payload.flow.trim(),
   };
+  const categoryErrors = validateProductCategory(state, nextItem, item);
+  if (productNameConflict(state.catalog, nextItem)) categoryErrors.push("当前品牌存在同名商品（回收站除外）");
+  if (categoryErrors.length) {
+    addAuditLog(state, "提交商品配置", item.id, "L3", "已拒绝", categoryErrors.join("；"));
+    return;
+  }
   const nextVariant: ProductVariant = {
-    catalogItemId: item.id,
+    productId: item.id,
     product: nextItem.name,
     sku: payload.variantSku.trim(),
     spec: payload.variantSpec.trim(),
     price: payload.variantPrice.trim(),
     points: payload.variantPoints.trim(),
   };
+  if (nextItem.product?.legacyVariants) {
+    nextItem.product = {
+      ...nextItem.product,
+      legacyVariants: nextItem.product.legacyVariants.map((variant) => variant.sku === currentVariant?.sku ? nextVariant : { ...variant, product: nextItem.name, productId: item.id }),
+    };
+  }
   const id = `REL-${String(state.releases.length + 1).padStart(3, "0")}`;
   const scope = catalogReleaseScopeSelection(state, item, payload.variantPoints);
   const release: ReleaseRecord = {
@@ -2151,8 +2180,8 @@ function submitCatalogChange(state: AppState, payload: CatalogChangePayload) {
   const diff: ReleaseDiff = {
     release: id,
     object: `商品/服务 ${item.name}`,
-    before: summarizeCatalogConfig(item, currentVariant),
-    after: summarizeCatalogConfig(nextItem, nextVariant),
+    before: summarizeCatalogConfig(state, item, currentVariant),
+    after: summarizeCatalogConfig(state, nextItem, nextVariant),
     impact: payload.variantPoints.trim(),
   };
   const change: CatalogChange = {
@@ -2176,6 +2205,10 @@ function submitPointChange(state: AppState, payload: PointChangePayload) {
   const actionPolicy = configReleaseActionPolicy(state);
   const point = state.points.find((item) => item.id === payload.pointId);
   if (!point) return;
+  if (!pointVisibleForCurrentUser(state, point) || state.pointChanges.some((change) => change.pointId === point.id && change.status === "待审批")) {
+    addAuditLog(state, "提交点位配置", point.id, "L3", "已拒绝", "点位不在授权范围或已有待审批变更。");
+    return;
+  }
   if (!actionPolicy.allowed) {
     addAuditLog(state, actionPolicy.label, point.id, actionPolicy.risk, "已拒绝", actionPolicy.message);
     return;
@@ -2598,14 +2631,17 @@ function applyCatalogChange(state: AppState, releaseId: string, approved: boolea
     return;
   }
   const catalogIndex = state.catalog.findIndex((item) => item.id === change.itemId);
-  const error = validateCatalogContent(state.catalog, change.afterItem);
-  if (catalogIndex < 0 || state.catalog[catalogIndex].deletedAt || error) {
+  if (catalogIndex < 0 || (!change.categoryOnly && !change.afterItem.product?.deletedAt && productNameConflict(state.catalog, change.afterItem))) {
     change.status = "已驳回";
-    addAuditLog(state, "应用商品配置", change.itemId, "L3", "已拒绝", error || "商品已删除或回收"); return;
+    addAuditLog(state, "应用商品配置", change.itemId, "L3", "已拒绝", "商品已永久删除或存在同品牌名称冲突");
+    return;
   }
-  state.catalog[catalogIndex] = change.afterItem;
-  if (change.afterVariant) {
-    const variantIndex = state.productVariants.findIndex((variant) => variant.catalogItemId === change.itemId || (!variant.catalogItemId && variant.product === change.beforeItem.name));
+  if (catalogIndex >= 0) state.catalog[catalogIndex] = change.categoryOnly ? { ...state.catalog[catalogIndex], categoryId: change.afterItem.categoryId } : change.afterItem;
+  // Classification approvals and rollbacks only update the category association.
+  if (!change.categoryOnly && change.afterItem.product) {
+    syncProductVariants(state, change.afterItem, change.beforeItem.name);
+  } else if (!change.categoryOnly && change.afterVariant) {
+    const variantIndex = state.productVariants.findIndex((variant) => variant.sku === change.afterVariant?.sku || variant.product === change.beforeItem.name);
     if (variantIndex >= 0) state.productVariants[variantIndex] = change.afterVariant;
     else state.productVariants.unshift(change.afterVariant);
   }
@@ -2715,6 +2751,7 @@ function createRollbackChange(state: AppState, sourceReleaseId: string, rollback
     state.catalogChanges.unshift({
       release: rollbackReleaseId,
       itemId: catalogChange.itemId,
+      categoryOnly: catalogChange.categoryOnly,
       beforeItem: currentItem,
       afterItem: catalogChange.beforeItem,
       beforeVariant: currentVariant || catalogChange.afterVariant,
@@ -2806,7 +2843,10 @@ function reviewApproval(state: AppState, approvalId: string, decision: "approve"
     addAuditLog(state, `审批${decision === "approve" ? "通过" : "驳回"}`, approval.target, approval.risk, "已拒绝", policy.message);
     return;
   }
-  const approved = decision === "approve";
+  const catalogChange = state.catalogChanges.find(change => change.release === approval.target);
+  const invalidCatalog = catalogChange && (!state.catalog.some(item => item.id === catalogChange.itemId) || (!catalogChange.categoryOnly && !catalogChange.afterItem.product?.deletedAt && productNameConflict(state.catalog, catalogChange.afterItem)));
+  const approved = decision === "approve" && !invalidCatalog;
+  if (decision === "approve" && invalidCatalog) note = "商品已永久删除或出现同品牌名称冲突，本次申请已驳回，请修正后重新提交。";
   approval.status = approved ? "审批通过" : "已驳回";
   const detail = note?.trim() || (approved ? "审批通过，相关对象已更新。" : "审批驳回，等待发起人修正。");
 
@@ -2965,8 +3005,8 @@ function requestStatusLabel(request: BusinessRequest, status: string): string {
   return labels[request.scenario]?.[status] || status;
 }
 
-function summarizeCatalogConfig(item: CatalogItem, variant?: ProductVariant): string {
-  const parts = [`状态：${item.status}`, `属性：${item.attrs.join("、") || "-"}`, `履约：${item.flow}`];
+function summarizeCatalogConfig(state: AppState, item: CatalogItem, variant?: ProductVariant): string {
+  const parts = [`状态：${item.status}`, `分类：${categoryLabel(state, item.categoryId)} [${item.categoryId || "无"}]`, `属性：${item.attrs.join("、") || "-"}`, `履约：${item.flow}`];
   if (variant) parts.push(`SKU：${variant.sku}`, `价格：${variant.price}`, `可售点位：${variant.points}`);
   return parts.join("；");
 }

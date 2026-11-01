@@ -1,4 +1,6 @@
 import type { LucideIcon } from "lucide-react";
+import type { ProductConfiguration, ProductTemplate } from "../features/products/types";
+import type { PointFieldTemplate } from "../features/pointCreation/config";
 
 export type ViewId =
   | "workbench"
@@ -102,6 +104,15 @@ export interface Point {
   city: string;
   status: string;
   owner: string;
+  code?: string;
+  organization_id?: string;
+  province?: string;
+  area?: string;
+  address?: string;
+  lat?: number | null;
+  lng?: number | null;
+  channel?: string;
+  customFields?: Record<string, string | number | boolean | null>;
 }
 
 export interface Device {
@@ -115,10 +126,19 @@ export interface Device {
   capability: string[];
 }
 
+export interface ProductCategory {
+  id: string;
+  brand: string;
+  name: string;
+  sortOrder: number;
+  enabled: boolean;
+}
+
 export interface CatalogItem {
   sellingPoints?: string[];
   introduction?: string;
   deletedAt?: string;
+  categoryId?: string;
   id: string;
   name: string;
   type: string;
@@ -126,6 +146,7 @@ export interface CatalogItem {
   status: string;
   attrs: string[];
   flow: string;
+  product?: ProductConfiguration;
 }
 
 export interface BusinessRequest {
@@ -232,6 +253,7 @@ export interface ProductType {
 
 export interface ProductVariant {
   catalogItemId?: string;
+  productId?: string;
   product: string;
   sku: string;
   spec: string;
@@ -259,6 +281,7 @@ export interface ReleaseDiff {
 }
 
 export interface CatalogChange {
+  categoryOnly?: boolean;
   release: string;
   itemId: string;
   beforeItem: CatalogItem;
@@ -496,6 +519,9 @@ export interface ScopeSelection {
 }
 
 export interface AppState extends MutableData {
+  productCategories?: ProductCategory[];
+  productTemplates?: ProductTemplate[];
+  pointFieldTemplates?: PointFieldTemplate[];
   auth: AuthState;
   currentUserId: string;
   filters: Filters;

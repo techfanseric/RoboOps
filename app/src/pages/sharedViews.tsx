@@ -1,3 +1,4 @@
+import { CategoryApprovalSummary } from "../features/products/CategoryApprovalSummary";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ListPlus, Play, Power, Receipt, RefreshCcw, Undo2, UploadCloud, X } from "lucide-react";
 import type { Dispatch, ReactNode } from "react";
@@ -21,6 +22,7 @@ import {
   pointIncidents,
   pointReadiness,
   pointRequests,
+  sellableVariantsAtPoint,
   pointTasks,
   releaseVisibleForCurrentUser,
   releaseRollbackActionPolicy,
@@ -35,6 +37,7 @@ import {
 import type { AppState, ApprovalRequest, BusinessRequest, Device, Incident, Point, ReleaseRecord, Task } from "../types/core";
 import { Badge, DataTable, DefinitionList, DetailLink, EmptyState, IconButton, MetricBars, NameCell, ReadonlyField, RecordList } from "../components/ui";
 import { resolveScopeSelection, scopeTypeLabel } from "../components/ScopeSelector";
+import { getPointFieldTemplate } from "../features/pointCreation/config";
 
 const incidentActionText: Record<IncidentWorkflowAction, { title: string; note: string; submit: string }> = {
   advance: { title: "推进异常状态", note: "处理说明", submit: "确认推进" },
@@ -254,9 +257,18 @@ export function OperationalFlow({ state, showFinancial = true }: { state: AppSta
 export function PointDetail({ state, point }: { state: AppState; point?: Point }) {
   if (!point) return <EmptyState>当前筛选范围暂无点位</EmptyState>;
   const devices = pointDevices(state, point.name);
-  const products = state.productVariants.filter((variant) => variant.points.includes(point.name));
+  const products = sellableVariantsAtPoint(state, point.name);
   const readiness = pointReadiness(state, point);
   const requests = pointRequests(state, point.name);
+  const fieldTemplate = getPointFieldTemplate(state, point.brand, point.scenario);
+  const fieldLabel = (key: string, fallback: string) => fieldTemplate.fields.find((field) => field.key === key)?.label || fallback;
+  const customRows: Array<[string, ReactNode]> = Object.entries(point.customFields || {}).map(([key, value]) => {
+    const field = fieldTemplate.fields.find((item) => item.key === key);
+    const option = field?.options?.find((item) => item.value === value);
+    const label = `${field?.label || key}${field && !field.enabled ? "（已停用）" : ""}`;
+    const display = value == null || value === "" ? "-" : typeof value === "boolean" ? value ? "是" : "否" : option?.label || String(value);
+    return [label, display];
+  });
   return (
     <aside className="detail-panel">
       <h3 className="band-title">点位概览</h3>
@@ -266,9 +278,16 @@ export function PointDetail({ state, point }: { state: AppState; point?: Point }
           rows={[
             ["营业状态", <Badge value={point.status} />],
             ["上线准入", <Badge value={readiness.status} />],
-            ["负责人", point.owner],
+            [fieldLabel("owner", "负责人"), point.owner],
+            [fieldLabel("code", "点位编码"), point.code || point.id],
+            ["品牌 / 场景", `${point.brand} / ${point.scenario}`],
+            ["所属组织", state.organizations.find((organization) => organization.id === point.organization_id)?.name || "-"],
+            ["完整地址", [point.province, point.city, point.area, point.address].filter(Boolean).join(" / ")],
+            ["经纬度", point.lat != null && point.lng != null ? `${point.lat}, ${point.lng}` : "未设置"],
+            [fieldLabel("channel", "渠道"), point.channel || "未设置"],
+            ...customRows,
             ["绑定设备", devices.map((device) => <Badge key={device.id} value={device.name} tone="neutral" />)],
-            ["可售范围", products.length ? products.map((product) => <Badge key={product.sku} value={product.product} tone="neutral" />) : "-"],
+            ["可售范围", products.length ? Array.from(new Set(products.map((product) => product.product))).map((name) => <Badge key={name} value={name} tone="neutral" />) : "-"],
             ["今日请求", requests.length],
             ["待处理异常", pointIncidents(state, point.name).length],
           ]}
@@ -463,6 +482,7 @@ export function ReleaseDetail({ state, release, dispatch }: { state: AppState; r
         <ReleaseRollbackActions state={state} release={release} dispatch={dispatch} />
         <div>
           <h4 className="subhead">差异查看</h4>
+          <CategoryApprovalSummary state={state} releaseId={release.id}/>
           <DataTable headers={["对象", "发布前", "发布后", "影响范围"]} rows={diffs.map((diff) => [diff.object, diff.before, diff.after, diff.impact])} />
         </div>
       </div>

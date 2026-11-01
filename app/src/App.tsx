@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { createInitialState, staticData } from "./data/mockData";
 import { AppShell, navItems } from "./components/AppShell";
@@ -90,6 +90,7 @@ function loadInitialState(): AppState {
 
 export function App() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadInitialState);
+  const [storageError, setStorageError] = useState("");
   const recordFeatureAudit = (event: { action: string; object: string; risk: string; result: string; detail: string }) =>
     dispatch({ type: "feature-audit", ...event });
   const orderTenantId = orderReportsAccess(state).tenantId;
@@ -104,7 +105,12 @@ export function App() {
   }, [location.pathname]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage(state)));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage(state)));
+      setStorageError("");
+    } catch {
+      setStorageError("浏览器存储空间不足，最新修改尚未保存。请减少商品图片或释放存储空间后再次保存，暂勿刷新页面。");
+    }
   }, [state]);
 
   useEffect(() => {
@@ -154,6 +160,7 @@ export function App() {
       onFilterChange={(key, value) => dispatch({ type: "set-filter", key, value })}
       onLogout={() => dispatch({ type: "logout" })}
     >
+      {storageError ? <div role="alert" className="policy-strip">{storageError}</div> : null}
       <Routes>
         <Route path="/" element={<Workbench state={state} dispatch={dispatch} />} />
         <Route path="/brands" element={<MenuGuard state={state} viewId="brands"><Brands state={state} dispatch={dispatch} /></MenuGuard>} />
