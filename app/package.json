@@ -1,18 +1,21 @@
 {
   "name": "roboops",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "test": "vitest run",
+    "test": "vitest run src",
     "build": "npm run check && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "deploy:cloudflare": "npm run build && wrangler pages deploy dist --project-name=roboops-console --branch=main"
+    "deploy:cloudflare": "npm run build && wrangler pages deploy dist --project-name=roboops-console --branch=main",
+    "gateway": "node server/device-gateway.mjs",
+    "test:gateway": "node --test server/device-gateway.test.mjs"
   },
   "dependencies": {
     "lucide-react": "1.23.0",
+    "mqtt": "^5.16.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router-dom": "7.18.1"

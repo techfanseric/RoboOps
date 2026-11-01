@@ -1,3 +1,4 @@
+import { validateModel, validateTelemetry } from "./hardware";
 import type {
   ConfigTemplate,
   DeviceOpsAction,
@@ -71,10 +72,12 @@ export function validateOfflinePolicy(state: DeviceOpsState, policy: OfflinePoli
 export function validateMaintenancePlan(state: DeviceOpsState, plan: MaintenancePlan): DomainResult {
   if (!plan.name.trim() || !plan.type.trim()) return reject("维护方案名称和类型不能为空。 ");
   if (!state.models.some((item) => item.id === plan.modelId)) return reject("维护方案适用型号不存在。 ");
-  if (!plan.steps.length || plan.steps.some((step) => !step.name.trim() || step.durationSeconds <= 0)) return reject("维护方案必须包含有效步骤。 ");
+  if (!plan.steps.length || plan.steps.some((step) => !step.name.trim() || !Number.isFinite(step.durationSeconds) || step.durationSeconds <= 0 || (step.circuit !== undefined && !["单路", "双路"].includes(step.circuit)))) return reject("维护方案必须包含有效步骤。 ");
   const conflict = state.maintenancePlans.some((item) => item.id !== plan.id && item.status !== "已删除" && item.name === plan.name && item.type === plan.type && item.modelId === plan.modelId);
   if (conflict) return reject("同名称、类型和硬件型号的维护方案已存在。 ");
+  if (state.models.find((model) => model.id === plan.modelId)?.supplierId !== plan.supplierId) return reject("方案供应商与型号不匹配。");
   for (const deviceId of plan.boundDeviceIds) {
+    if (!state.devices.some((device) => device.id === deviceId && device.modelId === plan.modelId && device.tenantId === state.tenantId)) return reject("绑定设备不存在或型号不匹配。");
     const duplicate = state.maintenancePlans.some((item) => item.id !== plan.id && item.status !== "已删除" && item.type === plan.type && item.boundDeviceIds.includes(deviceId));
     if (duplicate) return reject("同一设备同一维护类型只能绑定一个方案。 ");
   }
@@ -107,6 +110,8 @@ export function validateUpgradePolicy(state: DeviceOpsState, policy: UpgradePoli
 
 export function validateDeviceOpsAction(state: DeviceOpsState, action: DeviceOpsAction): DomainResult {
   switch (action.type) {
+    case "save-model": return validateModel(state, action.payload);
+    case "receive-telemetry": return validateTelemetry(state, action.payload.sn, action.payload.report);
     case "register-device": return validateDevice(state, action.payload);
     case "bind-device": return validateBinding(state, action.payload.deviceId, action.payload.tenantId, action.payload.pointId);
     case "change-device-model": return validateModelChange(state, action.payload.deviceId, action.payload.modelId);
@@ -174,6 +179,13 @@ function audit(state: DeviceOpsState, action: string, object: string, detail: st
 export function deviceOpsReducer(state: DeviceOpsState, action: DeviceOpsAction): DeviceOpsState {
   if (!validateDeviceOpsAction(state, action).ok) return state;
   switch (action.type) {
+    case "save-model": {
+      const old = state.models.find((model) => model.id === action.payload.id);
+      const model = { ...action.payload, revision: (old?.revision || 1) + 1 };
+      return audit({ ...state, models: old ? state.models.map((item) => item.id === model.id ? model : item) : [...state.models, model] }, "保存硬件型号", model.id, `配置版本 ${model.revision}，等待 APP 获取及回报`);
+    }
+    case "receive-telemetry": return { ...state, devices: state.devices.map((device) => device.sn.toUpperCase() === action.payload.sn.toUpperCase() ? { ...device, telemetry: action.payload.report, status: "在线" } : device) };
+
     case "register-device": return audit({ ...state, devices: [...state.devices, action.payload] }, "登记设备", action.payload.sn, "完成 SN、型号及供应商一致性校验");
     case "bind-device": return audit({ ...state, devices: state.devices.map((item) => item.id === action.payload.deviceId ? { ...item, tenantId: action.payload.tenantId, pointId: action.payload.pointId } : item) }, "绑定设备", action.payload.deviceId, `绑定点位 ${action.payload.pointId}`);
     case "change-device-model": return audit({ ...state, devices: state.devices.map((item) => item.id === action.payload.deviceId ? { ...item, modelId: action.payload.modelId } : item) }, "修改设备型号", action.payload.deviceId, `目标型号 ${action.payload.modelId}`);

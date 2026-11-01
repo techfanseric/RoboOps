@@ -4,6 +4,7 @@ import { useState } from "react";
 import { staticData } from "../data/mockData";
 import {
   configReleaseActionPolicy,
+  validateCatalogContent,
   filteredCatalogItems,
   filteredPoints,
   filteredProductVariants,
@@ -16,7 +17,8 @@ import { Badge, DataTable, DefinitionList, DetailLink, EmptyState, NameCell, Sec
 export function Catalog({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
-  const items = filteredCatalogItems(state);
+  const [recycled, setRecycled] = useState(false);
+  const items = filteredCatalogItems(state).filter((item) => Boolean(item.deletedAt) === recycled);
   const variants = filteredProductVariants(state);
   const releasePolicy = configReleaseActionPolicy(state);
   const selected = items.find((item) => item.id === selectedId) || items[0];
@@ -24,32 +26,33 @@ export function Catalog({ state, dispatch }: { state: AppState; dispatch: Dispat
 
   return (
     <>
-      <div className="split-detail">
+      <nav className="section-tabs" aria-label="商品管理"><button className={!recycled ? "active" : ""} onClick={() => setRecycled(false)}>商品目录</button><button className={recycled ? "active" : ""} onClick={() => setRecycled(true)}>回收站</button></nav>
+      <div className="catalog-layout">
         <Section
-          title="商品/服务目录"
+          title={recycled ? "商品回收站" : "商品/服务目录"}
           meta="配置商品、服务项目、销售属性和履约模板"
           action={
-            <button className="text-button primary-action" type="button" disabled={!selected || !releasePolicy.allowed} title={releasePolicy.message} onClick={() => selected && setEditing(selected)}>
+            <button className="text-button primary-action" type="button" disabled={!selected || recycled || !releasePolicy.allowed} title={releasePolicy.message} onClick={() => selected && setEditing(selected)}>
               <FilePenLine className="lucide-icon" /> 申请变更
             </button>
           }
         >
           {items.length ? (
             <DataTable
-              headers={["名称", "类型", "品牌", "状态", "属性", "履约模板"]}
+              headers={["名称", "类型", "品牌", "状态", "属性", "履约模板", "操作"]}
               rows={items.map((item) => ({
                 key: item.id,
                 selected: selected?.id === item.id,
                 onClick: () => setSelectedId(item.id),
                 label: `查看${item.name}`,
-                cells: [<NameCell primary={item.name} secondary={item.id} />, <Badge value={item.type} />, item.brand, <Badge value={item.status} />, item.attrs.map((attr) => <Badge key={attr} value={attr} tone="neutral" />), item.flow],
+                cells: [<NameCell primary={item.name} secondary={item.id} />, <Badge value={item.type} />, item.brand, <Badge value={item.status} />, item.attrs.map((attr) => <Badge key={attr} value={attr} tone="neutral" />), item.flow, <span className="inline-actions">{(recycled ? ["restore", "purge"] as const : ["recycle"] as const).map((operation) => <button key={operation} className="text-button" disabled={!releasePolicy.allowed} onClick={(event) => { event.stopPropagation(); const error = operation === "restore" ? validateCatalogContent(state.catalog, { ...item, deletedAt: undefined }) : ""; if (error) { window.alert(error); return; } if (state.catalogChanges.some((change) => change.itemId === item.id && change.status === "待审批")) { window.alert("存在待审批变更，请先处理。"); return; } if (window.confirm(operation === "purge" ? "永久删除此商品？此操作不可恢复，历史记录仍保留。" : operation === "restore" ? "恢复商品为草稿？" : "将商品移入回收站并停止销售？")) dispatch({ type: "catalog-lifecycle", payload: { itemId: item.id, operation } }); }}>{({ restore: "恢复", purge: "永久删除", recycle: "移入回收站" })[operation]}</button>)}</span>],
               }))}
             />
           ) : (
             <EmptyState>当前账号的数据范围内暂无商品/服务</EmptyState>
           )}
         </Section>
-        <CatalogDetail state={state} item={selected} variants={variants.filter((variant) => variant.product === selected?.name)} onEdit={() => selected && setEditing(selected)} />
+        <CatalogDetail state={state} item={selected} variants={variants.filter((variant) => variant.product === selected?.name)} onEdit={() => selected && !recycled && setEditing(selected)} />
       </div>
 
       <div className="grid two">
@@ -93,7 +96,7 @@ function CatalogDetail({ state, item, variants, onEdit }: { state: AppState; ite
           <h3 className="band-title">目录配置</h3>
           <p className="band-meta">{item.id} / {item.brand}</p>
         </div>
-        <button className="text-button" type="button" onClick={onEdit}>
+        <button className="text-button" type="button" disabled={Boolean(item.deletedAt)} onClick={onEdit}>
           <FilePenLine className="lucide-icon" /> 变更
         </button>
       </div>
@@ -103,6 +106,8 @@ function CatalogDetail({ state, item, variants, onEdit }: { state: AppState; ite
             ["类型", <Badge value={item.type} />],
             ["状态", <Badge value={item.status} />],
             ["履约模板", item.flow],
+            ["商品卖点", item.sellingPoints?.join("、") || "未填写"],
+            ["商品简介", item.introduction || "未填写"],
             ["销售属性", item.attrs.map((attr) => <Badge key={attr} value={attr} tone="neutral" />)],
             ["待发布", changes.length ? changes.map((change) => <Badge key={change.release} value={`${change.release} ${change.status}`} />) : "-"],
           ]}
@@ -114,7 +119,7 @@ function CatalogDetail({ state, item, variants, onEdit }: { state: AppState; ite
 }
 
 function CatalogChangeDrawer({ state, item, dispatch, onClose }: { state: AppState; item: CatalogItem; dispatch: Dispatch<AppAction>; onClose: () => void }) {
-  const currentVariant = state.productVariants.find((variant) => variant.product === item.name);
+  const currentVariant = state.productVariants.find((variant) => variant.catalogItemId === item.id || (!variant.catalogItemId && variant.product === item.name));
   const policy = configReleaseActionPolicy(state);
   const points = filteredPoints(state);
   const [name, setName] = useState(item.name);
@@ -125,8 +130,11 @@ function CatalogChangeDrawer({ state, item, dispatch, onClose }: { state: AppSta
   const [variantSpec, setVariantSpec] = useState(currentVariant?.spec || "");
   const [variantPrice, setVariantPrice] = useState(currentVariant?.price || "");
   const [selectedPoints, setSelectedPoints] = useState(() => points.filter((point) => currentVariant?.points.includes(point.name)).map((point) => point.name));
+  const [sellingPoints, setSellingPoints] = useState((item.sellingPoints || []).join("\n"));
+  const [introduction, setIntroduction] = useState(item.introduction || "");
+  const contentError = validateCatalogContent(state.catalog, { ...item, name, sellingPoints: sellingPoints.split("\n").map((point) => point.trim()).filter(Boolean), introduction });
   const [reason, setReason] = useState("");
-  const canSubmit = policy.allowed && [name, status, flow, variantSku, variantSpec, variantPrice, reason].every((value) => value.trim().length > 0) && selectedPoints.length > 0;
+  const canSubmit = !contentError && policy.allowed && [name, status, flow, variantSku, variantSpec, variantPrice, reason].every((value) => value.trim().length > 0) && selectedPoints.length > 0;
 
   return (
     <div className="drawer-scrim" role="presentation" onClick={onClose}>
@@ -151,6 +159,8 @@ function CatalogChangeDrawer({ state, item, dispatch, onClose }: { state: AppSta
               type: "submit-catalog-change",
               payload: {
                 itemId: item.id,
+                sellingPoints: sellingPoints.split("\n").map((point) => point.trim()).filter(Boolean),
+                introduction,
                 name,
                 status,
                 attrs: attrs.split(/\n|、|,/).map((attr) => attr.trim()).filter(Boolean),
@@ -165,7 +175,10 @@ function CatalogChangeDrawer({ state, item, dispatch, onClose }: { state: AppSta
             onClose();
           }}
         >
+          {contentError ? <p role="alert">{contentError}</p> : null}
           <div className="form-grid">
+            <label className="field full"><span>商品卖点（选填，每行一条，每条最多 20 字，1 条起填）</span><textarea rows={3} value={sellingPoints} onChange={(event) => setSellingPoints(event.target.value)} /></label>
+            <label className="field full"><span>商品简介（{Array.from(introduction).length}/200）</span><textarea rows={4} value={introduction} onChange={(event) => setIntroduction(event.target.value)} /></label>
             <label className="field">
               <span>名称</span>
               <input value={name} onChange={(event) => setName(event.target.value)} />

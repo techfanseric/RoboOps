@@ -63,7 +63,7 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: TableRow
               aria-label={record.label}
               aria-current={record.selected ? "true" : undefined}
               onKeyDown={(event) => {
-                if (!record.onClick) return;
+                if (!record.onClick || event.target !== event.currentTarget) return;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   record.onClick();

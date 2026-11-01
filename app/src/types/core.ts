@@ -116,6 +116,9 @@ export interface Device {
 }
 
 export interface CatalogItem {
+  sellingPoints?: string[];
+  introduction?: string;
+  deletedAt?: string;
   id: string;
   name: string;
   type: string;
@@ -228,6 +231,7 @@ export interface ProductType {
 }
 
 export interface ProductVariant {
+  catalogItemId?: string;
   product: string;
   sku: string;
   spec: string;

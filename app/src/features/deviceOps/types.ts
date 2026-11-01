@@ -22,7 +22,12 @@ export type HardwareCapabilities = {
   supportsPumpback: boolean;
 };
 
+export type IoMapping = { channel: number; pumpIo: string; valveIo: string; sensorIo: string };
+
 export type DeviceModel = {
+  revision?: number;
+  channelCount?: number;
+  ioMapping?: IoMapping[];
   id: string;
   name: string;
   alias: string;
@@ -33,7 +38,10 @@ export type DeviceModel = {
   status: "启用" | "停用";
 };
 
+export type DeviceTelemetry = { reportedAt: string; sequence: number; modelRevision: number; channels: Array<{ channel: number; materialCode: string; remaining: number; sensorValue: number | null }>; };
+
 export type ManagedDevice = {
+  telemetry?: DeviceTelemetry;
   id: string;
   name: string;
   sn: string;
@@ -129,6 +137,8 @@ export type OfflinePolicy = {
 };
 
 export type MaintenanceStep = {
+  circuit?: "单路" | "双路";
+  repeatConfirmation?: boolean;
   order: number;
   name: string;
   durationSeconds: number;
@@ -236,6 +246,8 @@ export type DeviceOpsState = {
 export type DomainResult = { ok: true } | { ok: false; message: string };
 
 export type DeviceOpsAction =
+  | { type: "save-model"; payload: DeviceModel }
+  | { type: "receive-telemetry"; payload: { sn: string; report: DeviceTelemetry } }
   | { type: "register-device"; payload: ManagedDevice }
   | { type: "bind-device"; payload: { deviceId: string; tenantId: string; pointId: string } }
   | { type: "change-device-model"; payload: { deviceId: string; modelId: string } }

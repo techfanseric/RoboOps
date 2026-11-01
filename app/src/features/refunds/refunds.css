@@ -136,12 +136,10 @@
   font-size: 12px;
   margin-top: 6px;
 }
-.refund-table-top select {
-  padding: 6px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 4px;
-  color: var(--text);
+.refund-table-top > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .refund-dialog {
   width: min(520px, calc(100vw - 32px));

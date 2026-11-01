@@ -68,12 +68,12 @@ export function OrderOperationsPage({ appState, tenantId, snapshot, visiblePoint
       {access.canViewOrders && view === "points" ? <PointProfiles state={state} canOperate={access.canOperateOrders} onSave={(draft) => run(() => mutate((current) => savePoint(current, draft)), "点位资料已保存" )} /> : null}
       {access.canViewOrders && view === "orders" ? (
         <>
-          <div className="grid four">
-            <Section title="全部订单"><strong>{counts.total}</strong></Section>
-            <Section title="待制作 / 异常"><strong>{counts.waiting} / {counts.exception}</strong></Section>
-            <Section title="已制作"><strong>{counts.completed}</strong></Section>
-            <Section title="已退单"><strong>{counts.refunded}</strong></Section>
-          </div>
+          <dl className="ops-summary" aria-label="订单状态摘要">
+            <div><dt>全部订单</dt><dd>{counts.total}</dd></div>
+            <div><dt>待制作 / 异常</dt><dd>{counts.waiting} / {counts.exception}</dd></div>
+            <div><dt>已制作</dt><dd>{counts.completed}</dd></div>
+            <div><dt>已退单</dt><dd>{counts.refunded}</dd></div>
+          </dl>
           <ManualOrderForm state={state} canOperate={access.canOperateOrders} operator={access.operator} onCreate={(payload) => run(() => mutate((current) => createManualOrder(current, payload).state), "手工订单已创建，初始状态为未下发", { action: "创建手工订单", object: payload.pointId, risk: "L2", detail: `${payload.productName} / ${payload.specification}` } )} />
           <Section title="订单与设备下发" meta="首次下发与显式重发分开；下发前重新校验点位、设备、配方和物料步骤">
             <DataTable

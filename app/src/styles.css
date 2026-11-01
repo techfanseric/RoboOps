@@ -45,6 +45,10 @@ textarea {
   font: inherit;
 }
 
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--teal);
+}
+
 button {
   cursor: pointer;
 }
@@ -850,7 +854,7 @@ button {
 
 .filters {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -871,8 +875,8 @@ button {
   color: var(--muted);
 }
 
-.field select,
-.field input,
+:is(.field select, .control-select),
+.field input:not([type="checkbox"]):not([type="radio"]),
 .field textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -881,7 +885,7 @@ button {
   min-width: 148px;
 }
 
-.field input,
+.field input:not([type="checkbox"]):not([type="radio"]),
 .field textarea {
   background: var(--surface);
   padding: 8px 10px;
@@ -892,7 +896,7 @@ button {
   line-height: 1.5;
 }
 
-.field select {
+:is(.field select, .control-select) {
   appearance: none;
   -webkit-appearance: none;
   background-color: var(--surface);
@@ -903,19 +907,21 @@ button {
   padding: 8px 42px 8px 10px;
 }
 
-.field select::-ms-expand {
+:is(.field select, .control-select)::-ms-expand {
   display: none;
 }
 
-.field select:hover,
-.field input:hover,
-.field textarea:hover {
+:is(.field select, .control-select):hover,
+.field input:not([type="checkbox"]):not([type="radio"]):hover,
+.field textarea:hover,
+.control-input:hover {
   border-color: var(--line-strong);
 }
 
-.field select:focus,
-.field input:focus,
-.field textarea:focus {
+:is(.field select, .control-select):focus,
+.field input:not([type="checkbox"]):not([type="radio"]):focus,
+.field textarea:focus,
+.control-input:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(23, 117, 104, 0.14);
   outline: none;
@@ -1188,6 +1194,13 @@ dd .badge {
   max-width: 100%;
 }
 
+/* Text actions must size to their labels, not the icon-only grid tracks. */
+.actions:has(> .text-button) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .band-header .actions,
 .actions.header-actions {
   display: inline-flex;
@@ -1200,6 +1213,7 @@ dd .badge {
 
 .inline-actions {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
@@ -1627,9 +1641,14 @@ dd .badge {
 }
 
 .checkbox-row input {
+  flex: 0 0 18px;
+  min-width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
   width: 18px;
   height: 18px;
-  accent-color: var(--accent);
+  accent-color: var(--teal);
 }
 
 .check-editor {
@@ -1850,9 +1869,8 @@ dd .badge {
   justify-content: flex-start;
 }
 
-.toolbar-row input,
-.toolbar-row select,
-.compact-form input {
+.toolbar-row input:not([type="checkbox"]):not([type="radio"]),
+.compact-form input:not([type="checkbox"]):not([type="radio"]) {
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1943,7 +1961,7 @@ dd .badge {
 
 .checkbox-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 8px 12px;
 }
 
@@ -2301,8 +2319,13 @@ dd .badge {
   }
 
   .grid.kpi {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
+
+  .grid.kpi .tile { min-width: 0; min-height: 0; padding: 12px; }
+  .grid.kpi .tile-value { font-size: 24px; overflow-wrap: anywhere; }
+  .grid.kpi .tile-foot { line-height: 1.45; }
 
   .band-header {
     display: grid;
@@ -2385,8 +2408,8 @@ dd .badge {
     width: 100%;
   }
 
-  .field select,
-  .field input,
+  :is(.field select, .control-select),
+  .field input:not([type="checkbox"]):not([type="radio"]),
   .field textarea {
     width: 100%;
   }
@@ -2440,4 +2463,65 @@ dd .badge {
     grid-row: 1;
     justify-self: end;
   }
+}
+
+.cleaning-step { margin: 0; padding: 16px; border: 1px solid var(--border, #d8e0de); border-radius: 8px; min-width: 0; }
+.cleaning-step > .inline-actions { display: flex; gap: 8px; margin-top: 12px; }
+.device-json { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: #f4f7f6; font-size: 12px; }
+
+/* Compact operational layouts: actions stay readable, fields never size checkboxes. */
+.text-button, .icon-button { white-space: nowrap; flex-shrink: 0; }
+.inline-actions > .text-button { flex: 0 0 auto; }
+.checkbox-row { min-width: 0; justify-content: flex-start; }
+.checkbox-row > span { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.field { min-width: 0; }
+.field input:not([type="checkbox"]):not([type="radio"]), :is(.field select, .control-select), .field textarea { max-width: 100%; }
+.catalog-layout { display: grid; gap: 16px; min-width: 0; }
+.catalog-layout > * { min-width: 0; }
+.catalog-layout .detail-panel { position: static; max-height: none; }
+.catalog-layout .detail-stack { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 1fr); gap: 24px; }
+.catalog-layout td:last-child { min-width: 168px; }
+.ops-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 24px; margin: 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.ops-summary > div { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ops-summary dt { font-size: 12px; color: var(--muted); }
+.ops-summary dd { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); }
+.ops-summary small { font-size: 12px; color: var(--muted); }
+.ops-disclosure { min-width: 0; }
+.ops-disclosure > summary { cursor: pointer; color: var(--teal); padding: 12px 0; font-weight: 600; }
+.ops-disclosure[open] > summary { margin-bottom: 8px; }
+.device-binding-copy { display: grid; gap: 4px; }
+.device-binding-copy strong { font-weight: 600; color: var(--ink); }
+@media (max-width: 1000px) {
+  .ops-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalog-layout .detail-stack { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}
+@media (max-width: 680px) {
+  .ops-summary { gap: 8px 12px; padding: 12px; }
+  .ops-summary small { flex-basis: 100%; }
+  .checkbox-grid { grid-template-columns: minmax(0, 1fr); }
+  .catalog-layout td:last-child { min-width: 0; }
+  .inline-actions { gap: 8px; }
+}
+
+.drawer-form > p { margin: 0; }
+.action-drawer td input { width: 100%; min-width: 64px; max-width: 100%; min-height: 36px; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--surface); color: var(--text); }
+
+.ops-context { margin: -8px 0; color: var(--muted); font-size: 12px; }
+.ops-feedback { padding: 6px 12px; }
+.ops-tabs { flex-wrap: nowrap; overflow-x: auto; min-width: 0; }
+.ops-tabs button { flex: 0 0 auto; white-space: nowrap; }
+
+/* Standalone table controls share the same states and appearance as form fields. */
+select.control-select { min-width: 112px; min-height: 38px; max-width: 100%; font-size: 13px; }
+select.control-select:disabled { cursor: not-allowed; opacity: 0.6; background-color: var(--bg); }
+.filters > .text-button { height: 38px; min-height: 38px; line-height: 20px; }
+.ops-filters { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(148px, 200px) minmax(148px, 200px) auto; align-items: end; gap: 12px; }
+.ops-filters .field > input, .ops-filters .field > select { width: 100%; min-width: 0; }
+@media (max-width: 760px) {
+  .ops-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ops-filters .field:first-child { grid-column: 1 / -1; }
+  .ops-filters > .text-button { grid-column: 1 / -1; justify-self: end; }
+}
+@media (max-width: 680px) {
+  select.control-select, .filters > .text-button, .filters .field > select, .filters .field > input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
 }

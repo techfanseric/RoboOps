@@ -36,7 +36,7 @@ export function scopeFromAppState(appState: AppState): DeviceOpsScope {
 
 export function capabilityForAction(action: DeviceOpsAction): DeviceOpsCapability {
   if (["adjust-storage", "calibrate-storage", "record-maintenance"].includes(action.type)) return "field-operation";
-  if (["register-device", "bind-device", "change-device-model", "activate-device", "bind-offline-policy", "save-offline-policy"].includes(action.type)) return "manage-device";
+  if (["save-model", "receive-telemetry", "register-device", "bind-device", "change-device-model", "activate-device", "bind-offline-policy", "save-offline-policy"].includes(action.type)) return "manage-device";
   if (["save-template", "publish-template", "save-maintenance-plan", "delete-maintenance-plan", "publish-maintenance-plan", "settle-maintenance-batch", "save-software-package", "delete-software-package", "set-software-status", "save-upgrade-policy", "enable-upgrade-policy", "settle-upgrade-device", "retry-upgrade-device", "retry-device-publish"].includes(action.type)) return "manage-configuration";
   return "view-audit";
 }
@@ -75,6 +75,7 @@ export function scopeDeviceOpsState(state: DeviceOpsState, scope: DeviceOpsScope
     storages: state.storages.filter((item) => deviceIds.has(item.deviceId)),
     storageLogs: state.storageLogs.filter((item) => state.storages.some((storage) => storage.id === item.storageId && deviceIds.has(storage.deviceId))),
     publishRecords: state.publishRecords.filter((item) => deviceIds.has(item.deviceId)),
+    maintenancePlans: state.maintenancePlans.map((plan) => ({ ...plan, boundDeviceIds: plan.boundDeviceIds.filter((id) => deviceIds.has(id)) })),
     maintenanceRecords: state.maintenanceRecords.filter((item) => deviceIds.has(item.deviceId)),
     maintenanceBatches: state.maintenanceBatches.map((batch) => ({ ...batch, deviceResults: batch.deviceResults.filter((item) => deviceIds.has(item.deviceId)) })).filter((batch) => batch.deviceResults.length > 0),
     upgradePolicies: state.upgradePolicies.map((policy) => ({ ...policy, scope: { ...policy.scope, deviceIds: policy.scope.deviceIds.filter((id) => deviceIds.has(id)) }, deviceResults: policy.deviceResults.filter((item) => deviceIds.has(item.deviceId)) })).filter((policy) => policy.scope.deviceIds.length > 0),

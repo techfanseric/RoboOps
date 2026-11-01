@@ -1,7 +1,9 @@
+import { GatewayPanel } from "./GatewayPanel";
+import { HardwarePanel } from "./HardwarePanel";
 import { AlertTriangle, Boxes, CircleGauge, Download, Plus, RefreshCw, Send, ShieldCheck, Trash2, Wrench } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useReducer, useState } from "react";
-import { Badge, DataTable, DefinitionList, EmptyState, KpiTile, NameCell, Section } from "../../components/ui";
+import { Badge, DataTable, DefinitionList, EmptyState, NameCell, Section } from "../../components/ui";
 import type { AppState } from "../../types/core";
 import { capabilityForAction, dangerousDeviceOpsAction, defaultDeviceOpsScope, deviceOpsStorageKey, isAuditOnly, scopeCan, scopeDeviceOpsState, scopeFromAppState } from "./access";
 import { deviceOpsReducer, safeParseDeviceOpsState, validateDeviceOpsAction } from "./domain";
@@ -56,6 +58,23 @@ export function DeviceOperationsPage({ appState, scope: scopedProps, onAudit }: 
       setFeedback({ tone: "danger", message });
       return false;
     }
+    if (action.type === "save-model" && state.points.some((point) => !scope.pointIds.includes(point.id))) {
+      setFeedback({ tone: "danger", message: "型号参数影响当前企业全部关联设备，需要完整点位范围。" }); return false;
+    }
+    if (["publish-maintenance-plan", "delete-maintenance-plan"].includes(action.type)) {
+      const planId = (action.payload as { planId: string }).planId;
+      const plan = state.maintenancePlans.find((item) => item.id === planId);
+      if (plan?.boundDeviceIds.some((id) => !visibleState.devices.some((device) => device.id === id))) {
+        setFeedback({ tone: "danger", message: "方案包含授权范围外设备，请由完整范围管理员发布或删除。" }); return false;
+      }
+    }
+    // Editors receive a projected view; preserve bindings outside the current point scope.
+    if (action.type === "save-maintenance-plan") {
+      const planId = action.payload.id;
+      const previous = state.maintenancePlans.find((item) => item.id === planId);
+      const visibleIds = new Set(visibleState.devices.map((item) => item.id));
+      action = { ...action, payload: { ...action.payload, boundDeviceIds: [...new Set([...(previous?.boundDeviceIds.filter((id) => !visibleIds.has(id)) || []), ...action.payload.boundDeviceIds])] } };
+    }
     const result = validateDeviceOpsAction(state, action);
     if (!result.ok) {
       onAudit?.({ action: action.type, object: auditObject, risk: risky ? "L4" : "L2", result: "拒绝", detail: result.message.trim() });
@@ -81,22 +100,24 @@ export function DeviceOperationsPage({ appState, scope: scopedProps, onAudit }: 
 
   return (
     <>
-      <div className="grid four">
-        <KpiTile title="纳管设备" value={visibleState.devices.length} foot={`${visibleState.devices.filter((item) => item.status === "在线").length} 台在线`} />
-        <KpiTile title="硬件型号" value={visibleState.models.length} foot={`${visibleState.suppliers.filter((item) => item.authorizedTenantIds.includes(scope.tenantId)).length} 家供应商已授权`} />
-        <KpiTile title="料仓预警" value={lowStorages} foot="容量、余量、阈值联动校验" />
-        <KpiTile title="下发待处理" value={failedPublishes} foot="保留批次和逐设备失败原因" />
-      </div>
+      <dl className="ops-summary" aria-label="设备运营摘要">
+        <div><dt>纳管设备</dt><dd>{visibleState.devices.length}</dd><small>{visibleState.devices.filter((item) => item.status === "在线").length} 台在线</small></div>
+        <div><dt>硬件型号</dt><dd>{visibleState.models.length}</dd></div>
+        <div><dt>料仓预警</dt><dd>{lowStorages}</dd></div>
+        <div><dt>下发待处理</dt><dd>{failedPublishes}</dd></div>
+      </dl>
 
-      <div className="policy-strip"><Badge value={isAuditOnly(scope) ? "审计只读" : scope.roles.join("、") || "未授权"} /><span>当前数据范围：企业 {scope.tenantId}，{scope.pointIds.length ? `${scope.pointIds.length} 个点位` : "企业内全部点位"}；用户 {scope.userName}</span></div>
+      <p className="ops-context">{isAuditOnly(scope) ? "审计只读 · " : ""}企业 {scope.tenantId} · {scope.pointIds.length} 个授权点位</p>
 
-      {feedback ? <div className="policy-strip" role="status"><Badge value={feedback.tone === "success" ? "操作成功" : "校验未通过"} tone={feedback.tone} /><span>{feedback.message}</span></div> : null}
+      {feedback ? <div className="policy-strip ops-feedback" role="status"><Badge value={feedback.tone === "success" ? "操作成功" : "校验未通过"} tone={feedback.tone} /><span>{feedback.message}</span></div> : null}
 
-      <nav className="section-tabs" aria-label="设备运营模块">
+      <nav className="section-tabs ops-tabs" aria-label="设备运营模块">
         {tabs.map((item) => <button key={item.id} type="button" className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
       </nav>
 
       {tab === "devices" ? <DevicesTab state={visibleState} open={open} run={run} scope={scope} /> : null}
+      {tab === "configuration" ? <details className="ops-disclosure"><summary>设备接口与 MQTT 联调</summary><GatewayPanel state={state} appState={appState} enabled={scopeCan(scope, "manage-device") && state.points.every((point) => scope.pointIds.includes(point.id)) && scope.pointIds.length > 0} receive={dispatch} /></details> : null}
+      {tab === "devices" || tab === "configuration" ? <HardwarePanel mode={tab === "devices" ? "models" : "actual"} state={visibleState} appState={appState} canManage={scopeCan(scope, "manage-device")} run={run} /> : null}
       {tab === "configuration" ? <ConfigurationTab state={visibleState} open={open} run={run} scope={scope} /> : null}
       {tab === "offline" ? <OfflineTab state={visibleState} open={open} run={run} scope={scope} /> : null}
       {tab === "maintenance" ? <MaintenanceTab state={visibleState} open={open} run={run} scope={scope} /> : null}
@@ -108,7 +129,7 @@ export function DeviceOperationsPage({ appState, scope: scopedProps, onAudit }: 
       {editor === "storage" && targetId ? <StorageEditor state={state} storageId={targetId} run={run} close={close} /> : null}
       {editor === "calibration" && targetId ? <CalibrationEditor state={state} storageId={targetId} run={run} close={close} /> : null}
       {editor === "offline" ? <OfflineEditor state={state} run={run} close={close} /> : null}
-      {editor === "maintenance" ? <MaintenanceEditor state={state} run={run} close={close} /> : null}
+      {editor === "maintenance" ? <MaintenanceEditor state={visibleState} planId={targetId} run={run} close={close} /> : null}
       {editor === "maintenanceRecord" ? <MaintenanceRecordEditor state={visibleState} scope={scope} run={run} close={close} /> : null}
       {editor === "software" ? <SoftwareEditor state={state} run={run} close={close} /> : null}
       {editor === "upgrade" ? <UpgradeEditor state={state} run={run} close={close} /> : null}
@@ -118,33 +139,24 @@ export function DeviceOperationsPage({ appState, scope: scopedProps, onAudit }: 
 
 function DevicesTab({ state, open, run, scope }: PageSectionProps) {
   const canManage = scopeCan(scope, "manage-device");
-  const [selectedModel, setSelectedModel] = useState(state.models[0]?.id || "");
   const [bindingDeviceId, setBindingDeviceId] = useState(state.devices.find((item) => !item.tenantId)?.id || state.devices[0]?.id || "");
   const [pointId, setPointId] = useState(state.points[0]?.id || "");
-  const model = state.models.find((item) => item.id === selectedModel) || state.models[0];
   return (
     <>
       <Section title="设备台账" meta="SN、企业/点位绑定、产品型号与激活继承" action={<button className="text-button primary-action" type="button" disabled={!canManage} onClick={() => open("device")}><Plus className="lucide-icon" /> 登记设备</button>}>
         <DataTable headers={["设备", "SN", "供应商 / 型号", "企业 / 点位", "状态", "版本", "动作"]} rows={state.devices.map((device) => {
           const supplier = state.suppliers.find((item) => item.id === device.supplierId);
           const hardware = state.models.find((item) => item.id === device.modelId);
-          return [<NameCell primary={device.name} secondary={device.id} />, device.sn, <NameCell primary={supplier?.name || "-"} secondary={hardware?.name || "-"} />, <NameCell primary={device.tenantId || "未关联"} secondary={device.pointId || "未绑定点位"} />, <Badge value={device.status} />, <span>App {device.appVersion}<br /><span className="secondary">固件 {device.firmwareVersion} / Web {device.webVersion}</span></span>, <span className="inline-actions">{device.status === "待激活" ? <button className="text-button" disabled={!canManage} type="button" onClick={() => run({ type: "activate-device", payload: { deviceId: device.id } }, "设备已激活并继承默认策略。")}>激活</button> : null}<select disabled={!canManage} aria-label={`修改 ${device.sn} 型号`} value={device.modelId} onChange={(event) => run({ type: "change-device-model", payload: { deviceId: device.id, modelId: event.target.value } }, "设备型号已更新。")}>{state.models.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}</select></span>];
+          return [<NameCell primary={device.name} secondary={device.id} />, device.sn, <NameCell primary={supplier?.name || "-"} secondary={hardware?.name || "-"} />, <NameCell primary={device.tenantId || "未关联"} secondary={device.pointId || "未绑定点位"} />, <Badge value={device.status} />, <span>App {device.appVersion}<br /><span className="secondary">固件 {device.firmwareVersion} / Web {device.webVersion}</span></span>, <span className="inline-actions">{device.status === "待激活" ? <button className="text-button" disabled={!canManage} type="button" onClick={() => run({ type: "activate-device", payload: { deviceId: device.id } }, "设备已激活并继承默认策略。")}>激活</button> : null}<select className="control-select" disabled={!canManage} aria-label={`修改 ${device.sn} 型号`} value={device.modelId} onChange={(event) => run({ type: "change-device-model", payload: { deviceId: device.id, modelId: event.target.value } }, "设备型号已更新。")}>{state.models.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}</select></span>];
         })} />
       </Section>
-      <Section title="企业与点位绑定" meta="供应商须先获企业授权；已关联其他企业或点位的设备不能直接改绑" action={<button className="text-button primary-action" disabled={!canManage} type="button" onClick={() => run({ type: "bind-device", payload: { deviceId: bindingDeviceId, tenantId: state.tenantId, pointId } }, "设备已完成企业与点位绑定。 ")}><ShieldCheck className="lucide-icon" /> 校验并绑定</button>}>
+      <details className="ops-disclosure"><summary>企业与点位绑定</summary><Section title="企业与点位绑定" meta="供应商须先获企业授权；已关联其他企业或点位的设备不能直接改绑" action={<button className="text-button primary-action" disabled={!canManage} type="button" onClick={() => run({ type: "bind-device", payload: { deviceId: bindingDeviceId, tenantId: state.tenantId, pointId } }, "设备已完成企业与点位绑定。 ")}><ShieldCheck className="lucide-icon" /> 校验并绑定</button>}>
         <div className="filters">
           <label className="field"><span>设备 SN</span><select value={bindingDeviceId} onChange={(event) => setBindingDeviceId(event.target.value)}>{state.devices.map((item) => <option key={item.id} value={item.id}>{item.sn} · {item.tenantId || "未关联企业"}</option>)}</select></label>
           <label className="field"><span>目标点位</span><select value={pointId} onChange={(event) => setPointId(event.target.value)}>{state.points.map((point) => <option key={point.id} value={point.id}>{point.name} · {point.id}</option>)}</select></label>
         </div>
-      </Section>
-      <div className="split-detail">
-        <Section title="型号与硬件能力" meta="型号归属供应商，设备不可跨供应商切换">
-          <DataTable headers={["型号", "类别", "供应商", "料仓 / 传感器", "状态"]} rows={state.models.map((item) => [<button type="button" className="text-button" onClick={() => setSelectedModel(item.id)}><NameCell primary={item.name} secondary={`${item.code} · ${item.alias}`} /></button>, item.category, state.suppliers.find((supplier) => supplier.id === item.supplierId)?.name, `${item.capabilities.storageMotors} / ${item.capabilities.weightSensors + item.capabilities.flowmeters + item.capabilities.liquidSensors}`, <Badge value={item.status} />])} />
-        </Section>
-        {model ? <Section title={model.name} meta="硬件能力快照">
-          <DefinitionList rows={[["主板 / 通信", `${model.capabilities.mainboard} · ${model.capabilities.communication}`], ["执行机构", `阀门 ${model.capabilities.valves.join("、")}；搅拌 ${model.capabilities.mixers}；蒸汽 ${model.capabilities.steamers}`], ["传感器", `称重 ${model.capabilities.weightSensors}；流量 ${model.capabilities.flowmeters}；液位 ${model.capabilities.liquidSensors}`], ["扩展能力", `回抽 ${model.capabilities.supportsPumpback ? "支持" : "不支持"}；糖桶清洗 ${model.capabilities.supportsSugarWash ? "支持" : "不支持"}`], ["授权状态", <Badge value={state.suppliers.find((item) => item.id === model.supplierId)?.authorizedTenantIds.includes(state.tenantId) ? "企业已授权" : "企业未授权"} />]]} />
-        </Section> : null}
-      </div>
+      </Section></details>
+
     </>
   );
 }
@@ -191,9 +203,14 @@ function OfflineTab({ state, open, run, scope }: PageSectionProps) {
 function MaintenanceTab({ state, open, run, scope }: PageSectionProps) {
   const canConfigure = scopeCan(scope, "manage-configuration");
   const canField = scopeCan(scope, "field-operation");
+  const [query, setQuery] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const plans = state.maintenancePlans.filter((plan) => (!modelFilter || plan.modelId === modelFilter) && (!statusFilter || plan.status === statusFilter) && `${plan.name} ${plan.type} ${state.models.find((model) => model.id === plan.modelId)?.name} ${state.suppliers.find((supplier) => supplier.id === plan.supplierId)?.name} ${plan.boundDeviceIds.map((id) => { const device = state.devices.find((entry) => entry.id === id); return `${device?.sn} ${state.points.find((point) => point.id === device?.pointId)?.name}`; }).join(" ")}`.toLowerCase().includes(query.toLowerCase()));
   return <>
+    <div className="filters ops-filters"><label className="field"><span>方案 / 类型 / 品牌 / 门店 / SN</span><input value={query} onChange={(event) => setQuery(event.target.value)} /></label><label className="field"><span>设备型号</span><select value={modelFilter} onChange={(event) => setModelFilter(event.target.value)}><option value="">全部</option>{state.models.map((model) => <option value={model.id} key={model.id}>{model.name}</option>)}</select></label><label className="field"><span>方案状态</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">全部</option><option>启用</option><option>停用</option><option>已删除</option></select></label><button className="text-button" onClick={() => { setQuery(""); setModelFilter(""); setStatusFilter(""); }}>重置</button></div>
     <Section title="维护与清洗方案" meta="名称/类型/型号冲突检查，同设备同类型唯一" action={<span className="inline-actions"><button className="text-button" disabled={!canField} type="button" onClick={() => open("maintenanceRecord")}><Wrench className="lucide-icon" /> 记录现场维护</button><button className="text-button primary-action" disabled={!canConfigure} type="button" onClick={() => open("maintenance")}><Plus className="lucide-icon" /> 新建方案</button></span>}>
-      <DataTable headers={["方案", "类型 / 型号", "步骤", "绑定设备", "状态", "动作"]} rows={state.maintenancePlans.map((item) => [<NameCell primary={item.name} secondary={item.id} />, <NameCell primary={item.type} secondary={state.models.find((model) => model.id === item.modelId)?.name || item.modelId} />, item.steps.length, item.boundDeviceIds.length, <Badge value={item.status} />, item.status === "已删除" ? <span className="secondary">历史保留</span> : <span className="inline-actions"><button className="text-button" disabled={!canConfigure} type="button" onClick={() => run({ type: "publish-maintenance-plan", payload: { planId: item.id } }, "维护方案已生成发布中批次。 ")}><Send className="lucide-icon" /> 发布</button><button className="icon-button" disabled={!canConfigure} type="button" aria-label={`删除${item.name}`} onClick={() => run({ type: "delete-maintenance-plan", payload: { planId: item.id } }, "方案已解绑，发布历史已保留。 ")}><Trash2 className="lucide-icon" /></button></span>])} />
+      <DataTable headers={["方案", "类型 / 型号", "步骤 / 总时长", "绑定设备", "状态", "动作"]} rows={plans.map((item) => [<NameCell primary={item.name} secondary={item.id} />, <NameCell primary={item.type} secondary={state.models.find((model) => model.id === item.modelId)?.name || item.modelId} />, `${item.steps.length} 步 / ${item.steps.reduce((sum, step) => sum + step.durationSeconds, 0)} 秒`, item.boundDeviceIds.length, <Badge value={item.status} />, item.status === "已删除" ? <span className="secondary">历史保留</span> : <span className="inline-actions"><button className="text-button" disabled={!canConfigure} onClick={() => open("maintenance", item.id)}>编辑 / 关联设备</button><button className="text-button" disabled={!canConfigure} onClick={() => run({ type: "save-maintenance-plan", payload: { ...item, status: item.status === "启用" ? "停用" : "启用" } }, "方案状态已保存。")}>{item.status === "启用" ? "停用" : "启用"}</button><button className="text-button" disabled={!canConfigure || item.status !== "启用"} type="button" onClick={() => run({ type: "publish-maintenance-plan", payload: { planId: item.id } }, "维护方案已生成发布中批次。 ")}><Send className="lucide-icon" /> 发布</button><button className="icon-button" disabled={!canConfigure} type="button" aria-label={`删除${item.name}`} onClick={() => run({ type: "delete-maintenance-plan", payload: { planId: item.id } }, "方案已解绑，发布历史已保留。 ")}><Trash2 className="lucide-icon" /></button></span>])} />
     </Section>
     <Section title="发布批次" meta="批次状态、逐设备结果与失败原因">
       {state.maintenanceBatches.length ? <DataTable headers={["批次", "方案", "生效时间", "状态", "设备结果", "动作"]} rows={state.maintenanceBatches.map((item) => [<NameCell primary={item.id} secondary={item.createdAt} />, item.planName, item.effectiveAt, <Badge value={item.status} />, <span>{item.deviceResults.map((result) => <Badge key={result.deviceId} value={`${state.devices.find((device) => device.id === result.deviceId)?.sn || result.deviceId} ${result.status}`} />)}</span>, item.status === "发布中" ? <button className="text-button" disabled={!canConfigure} type="button" onClick={() => run({ type: "settle-maintenance-batch", payload: { batchId: item.id } }, "维护发布回执已归集。")}>归集回执</button> : "-"])} /> : <EmptyState>尚未发布维护方案</EmptyState>}
@@ -266,10 +283,27 @@ function OfflineEditor({ state, run, close }: EditorProps) {
   return <Drawer title="新建离线策略" kicker="默认继承与单 SN 绑定" close={close}><form className="drawer-form" onSubmit={submit}><div className="form-grid"><label className="field"><span>策略名称</span><input required value={name} onChange={(e) => setName(e.target.value)} /></label><label className="field"><span>营业截止时间</span><input type="time" value={cutoff} onChange={(e) => setCutoff(e.target.value)} /></label><label className="field"><span>检查间隔（分钟）</span><input type="number" min="1" step="1" value={check} onChange={(e) => setCheck(Number(e.target.value))} /></label><label className="field"><span>最大离线时长（分钟）</span><input type="number" min="1" step="1" value={max} onChange={(e) => setMax(Number(e.target.value))} /></label><label className="checkbox-row full"><input type="checkbox" checked={isDefault} onChange={(e) => setDefault(e.target.checked)} /><span>设为默认策略（当前已有默认策略时会拒绝）</span></label></div><Actions close={close} /></form></Drawer>;
 }
 
-function MaintenanceEditor({ state, run, close }: EditorProps) {
-  const [name, setName] = useState(""); const [type, setType] = useState("管路清洗"); const [modelId, setModelId] = useState(state.models[0]?.id || ""); const [devices, setDevices] = useState<string[]>([]); const [steps, setSteps] = useState("排空管路|30|停止供料并排空\n清水冲洗|120|开启清水循环冲洗");
-  const submit = (event: FormEvent) => { event.preventDefault(); const model = state.models.find((item) => item.id === modelId)!; const plan: MaintenancePlan = { id: `clean-${Date.now()}`, name, type, modelId, supplierId: model.supplierId, status: "启用", description: "设备维护方案", boundDeviceIds: devices, steps: steps.split("\n").filter(Boolean).map((line, index) => { const [stepName, duration, instruction] = line.split("|"); return { order: index + 1, name: stepName?.trim() || "", durationSeconds: Number(duration), instruction: instruction?.trim() || "" }; }) }; if (run({ type: "save-maintenance-plan", payload: plan }, "维护方案已保存。")) close(); };
-  return <Drawer title="新建维护方案" kicker="步骤、绑定与发布" close={close}><form className="drawer-form" onSubmit={submit}><div className="form-grid"><label className="field"><span>方案名称</span><input required value={name} onChange={(e) => setName(e.target.value)} /></label><label className="field"><span>维护类型</span><input required value={type} onChange={(e) => setType(e.target.value)} /></label><label className="field full"><span>硬件型号</span><select value={modelId} onChange={(e) => { setModelId(e.target.value); setDevices([]); }}>{state.models.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="field full"><span>绑定设备（同设备同类型唯一）</span><div className="checkbox-grid">{state.devices.filter((item) => item.modelId === modelId).map((item) => <label className="checkbox-row" key={item.id}><input type="checkbox" checked={devices.includes(item.id)} onChange={(e) => setDevices((current) => e.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.sn} · {item.name}</span></label>)}</div></div><label className="field full"><span>步骤（每行：名称|秒数|指令）</span><textarea rows={5} value={steps} onChange={(e) => setSteps(e.target.value)} /></label></div><Actions close={close} /></form></Drawer>;
+function MaintenanceEditor({ state, planId, run, close }: EditorProps & { planId: string | null }) {
+  const existing = state.maintenancePlans.find((item) => item.id === planId);
+  const [plan, setPlan] = useState<MaintenancePlan>(() => structuredClone(existing || { id: `clean-${Date.now()}`, name: "", type: "开早", modelId: state.models[0]?.id || "", supplierId: state.models[0]?.supplierId || "", status: "启用", description: "", boundDeviceIds: [], steps: [{ order: 1, name: "清水冲洗", durationSeconds: 15, instruction: "", circuit: "单路", repeatConfirmation: false }] }));
+  const patchStep = (index: number, patch: Partial<MaintenancePlan["steps"][number]>) => setPlan({ ...plan, steps: plan.steps.map((step, i) => i === index ? { ...step, ...patch } : step) });
+  const move = (index: number, offset: number) => { const steps = [...plan.steps]; [steps[index], steps[index + offset]] = [steps[index + offset], steps[index]]; setPlan({ ...plan, steps: steps.map((step, i) => ({ ...step, order: i + 1 })) }); };
+  return <Drawer title={existing ? "编辑清洗方案" : "新建清洗方案"} kicker="方案、步骤与关联设备" close={close}><form className="drawer-form" onSubmit={(event) => { event.preventDefault(); if (run({ type: "save-maintenance-plan", payload: plan }, "清洗方案已保存。")) close(); }}><div className="form-grid">
+    <label className="field"><span>方案名称</span><input required maxLength={60} value={plan.name} onChange={(event) => setPlan({ ...plan, name: event.target.value })} /></label>
+    <label className="field"><span>方案类型</span><input required list="clean-types" value={plan.type} onChange={(event) => setPlan({ ...plan, type: event.target.value })} /><datalist id="clean-types">{["开早", "打烊", "周清", "手动清洗", "管路清洗"].map((type) => <option key={type}>{type}</option>)}</datalist></label>
+    <label className="field"><span>设备型号</span><select value={plan.modelId} onChange={(event) => setPlan({ ...plan, modelId: event.target.value, supplierId: state.models.find((model) => model.id === event.target.value)!.supplierId, boundDeviceIds: [] })}>{state.models.map((model) => <option value={model.id} key={model.id}>{model.name}</option>)}</select></label>
+    <label className="field"><span>方案状态</span><select value={plan.status} onChange={(event) => setPlan({ ...plan, status: event.target.value as MaintenancePlan["status"] })}><option>启用</option><option>停用</option></select></label>
+    <div className="field full"><span>关联设备</span><div className="checkbox-grid">{state.devices.filter((device) => device.modelId === plan.modelId).map((device) => <label className="checkbox-row" key={device.id}><input type="checkbox" checked={plan.boundDeviceIds.includes(device.id)} onChange={(event) => setPlan({ ...plan, boundDeviceIds: event.target.checked ? [...plan.boundDeviceIds, device.id] : plan.boundDeviceIds.filter((id) => id !== device.id) })} /><span className="device-binding-copy"><strong>{device.sn}</strong><span>{state.points.find((point) => point.id === device.pointId)?.name}</span></span></label>)}</div></div>
+    </div><p>总执行时间：{plan.steps.reduce((sum, step) => sum + step.durationSeconds, 0)} 秒（各步骤配置时长之和）</p>
+    {plan.steps.map((step, index) => <fieldset key={index} className="cleaning-step"><legend>步骤 {index + 1}</legend><div className="form-grid">
+      <label className="field"><span>清洗方式</span><input required list="clean-methods" value={step.name} onChange={(event) => patchStep(index, { name: event.target.value })} /></label>
+      <label className="field"><span>路数选择</span><select value={step.circuit || "单路"} onChange={(event) => patchStep(index, { circuit: event.target.value as "单路" | "双路" })}><option>单路</option><option>双路</option></select></label>
+      <label className="field"><span>执行时长（秒）</span><input required type="number" min={1} step={1} value={step.durationSeconds} onChange={(event) => patchStep(index, { durationSeconds: Number(event.target.value) })} /></label>
+      <label className="checkbox-row"><input type="checkbox" checked={step.repeatConfirmation || false} onChange={(event) => patchStep(index, { repeatConfirmation: event.target.checked })} />执行前再次确认</label>
+      <label className="field full"><span>操作说明 / 模式</span><input value={step.instruction} onChange={(event) => patchStep(index, { instruction: event.target.value })} /></label>
+      </div><div className="inline-actions"><button className="text-button" type="button" disabled={index === 0} onClick={() => move(index, -1)}>上移</button><button className="text-button" type="button" disabled={index === plan.steps.length - 1} onClick={() => move(index, 1)}>下移</button><button className="text-button" type="button" onClick={() => setPlan({ ...plan, steps: plan.steps.filter((_, i) => i !== index).map((entry, i) => ({ ...entry, order: i + 1 })) })}>删除步骤</button></div></fieldset>)}
+    <datalist id="clean-methods">{["清水冲洗", "排空阀", "消毒", "回抽", "人工确认"].map((name) => <option key={name}>{name}</option>)}</datalist>
+    <button className="text-button" type="button" onClick={() => setPlan({ ...plan, steps: [...plan.steps, { order: plan.steps.length + 1, name: "清水冲洗", durationSeconds: 15, instruction: "", circuit: "单路", repeatConfirmation: false }] })}>添加清洗步骤</button><Actions close={close} /></form></Drawer>;
 }
 
 function MaintenanceRecordEditor({ state, scope, run, close }: EditorProps & { scope: DeviceOpsScope }) {

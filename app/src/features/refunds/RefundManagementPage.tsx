@@ -472,6 +472,7 @@ export function RefundManagementPage({
             <label>
               选择单位{" "}
               <select
+                className="control-select"
                 aria-label="选择单位"
                 value={selectionMode}
                 onChange={(e) => setSelectionMode(e.target.value)}

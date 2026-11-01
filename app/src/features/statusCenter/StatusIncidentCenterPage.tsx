@@ -97,8 +97,8 @@ function OverviewTab({ state, appDispatch, domain, scope, run }: { state: AppSta
         <Section title="设备健康视图" meta="状态是当前快照，异常是需要跟踪处置的事件；两者不混为一个字段">
           <div className="toolbar-row status-filter-row">
             <input aria-label="搜索设备" placeholder="搜索设备、SN、点位或当前异常" value={search} onChange={(event) => setSearch(event.target.value)} />
-            <select aria-label="健康状态" value={health} onChange={(event) => setHealth(event.target.value)}>{["全部健康状态", "正常", "关注", "故障", "不可用"].map((item) => <option key={item}>{item}</option>)}</select>
-            <select aria-label="设备类型" value={type} onChange={(event) => setType(event.target.value)}><option>全部设备类型</option>{[...new Set(rows.map((row) => row.type))].map((item) => <option key={item}>{item}</option>)}</select>
+            <select className="control-select" aria-label="健康状态" value={health} onChange={(event) => setHealth(event.target.value)}>{["全部健康状态", "正常", "关注", "故障", "不可用"].map((item) => <option key={item}>{item}</option>)}</select>
+            <select className="control-select" aria-label="设备类型" value={type} onChange={(event) => setType(event.target.value)}><option>全部设备类型</option>{[...new Set(rows.map((row) => row.type))].map((item) => <option key={item}>{item}</option>)}</select>
           </div>
           {visible.length ? <DataTable headers={["设备", "点位", "连接 / 运行", "业务 / 安全", "健康", "当前异常"]} rows={visible.map((row) => ({ key: row.deviceId, selected: selected?.deviceId === row.deviceId, onClick: () => setSelectedId(row.deviceId), cells: [<NameCell primary={row.name} secondary={`${row.sn} · ${row.type}`} />, <NameCell primary={row.pointName} secondary={row.brand} />, <span className="badge-pair"><Badge value={row.connectionStatus} /><Badge value={row.operationStatus} /></span>, <span className="badge-pair"><Badge value={row.businessStatus} /><Badge value={row.safetyStatus} /></span>, <Badge value={row.health} />, row.currentException ? <NameCell primary={row.currentException} secondary={`${row.severity || "-"} · ${row.owner || "待分派"}`} /> : <span className="secondary">无未关闭异常</span>] }))} /> : <EmptyState>当前筛选下没有设备；空数据范围不会回退展示其他点位设备。</EmptyState>}
         </Section>
